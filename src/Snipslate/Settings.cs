@@ -82,11 +82,9 @@ internal static class KeyStore
         }
     }
 
-    public static void Set(Provider provider, string key)
-    {
-        Remove(provider);
+    /// <summary>Add replaces an existing key for the same provider, so a failed save never loses the old one.</summary>
+    public static void Set(Provider provider, string key) =>
         new PasswordVault().Add(new PasswordCredential(Resource, provider.ToString(), key));
-    }
 
     public static void Remove(Provider provider)
     {

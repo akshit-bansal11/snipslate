@@ -1,3 +1,5 @@
+using System.Windows.Forms.Automation;
+
 namespace Snipslate;
 
 internal sealed class SettingsForm : Form
@@ -264,5 +266,12 @@ internal sealed class SettingsForm : Form
         return null;
     }
 
-    private void Fail(string text) => message.Text = text;
+    private void Fail(string text)
+    {
+        message.Text = text;
+
+        // Screen readers don't watch label text, so announce the problem explicitly.
+        message.AccessibilityObject.RaiseAutomationNotification(
+            AutomationNotificationKind.Other, AutomationNotificationProcessing.ImportantMostRecent, text);
+    }
 }

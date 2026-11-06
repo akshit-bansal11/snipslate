@@ -23,7 +23,11 @@ public sealed record TranslateJob(
     string ApiKey,
     string TargetLanguage,
     byte[]? Png,
-    string? Text);
+    string? Text)
+{
+    // The generated ToString would print the API key.
+    public override string ToString() => $"TranslateJob {{ Provider = {Provider}, Model = {Model} }}";
+}
 
 /// <summary>A failure with a message that is safe and useful to show the user as-is.</summary>
 public sealed class TranslateException(string message) : Exception(message);
@@ -71,6 +75,13 @@ public static partial class Translator
 
     public static async Task<string> TranslateAsync(TranslateJob job, CancellationToken cancellation = default)
     {
+        // Checked here, not only in Settings, because settings.json can be edited by hand.
+        if (!IsAllowedBaseUrl(job.BaseUrl))
+        {
+            throw new TranslateException(
+                $"The base URL \"{job.BaseUrl}\" isn't allowed. It must start with https:// (http:// only for localhost).");
+        }
+
         using var request = BuildRequest(job);
         try
         {

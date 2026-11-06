@@ -51,7 +51,9 @@ internal sealed class SnipOverlay : Form
         using var screen = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(screen))
         {
-            g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
+            // CaptureBlt includes layered (transparent or always-on-top) windows.
+            g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size,
+                CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
         }
 
         using var overlay = new SnipOverlay(screen, bounds);
@@ -82,7 +84,7 @@ internal sealed class SnipOverlay : Form
             using var pen = new Pen(SystemColors.Highlight, 2);
             g.DrawRectangle(pen, selection);
         }
-        else
+        else if (!dragging)
         {
             TextRenderer.DrawText(g, Hint, SystemFonts.MessageBoxFont ?? Font, hintArea, Color.White,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);

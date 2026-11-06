@@ -22,6 +22,7 @@ public class HotkeyTests
     [InlineData("Hyper+T")]
     [InlineData("Ctrl+65")]
     [InlineData("Ctrl+NotAKey")]
+    [InlineData("Ctrl+A, B")]
     public void Rejects(string text) => Assert.False(Hotkey.TryParse(text, out _));
 
     [Fact]

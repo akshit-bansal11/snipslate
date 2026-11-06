@@ -102,6 +102,19 @@ public class TranslatorTests
         Assert.Equal(allowed, Translator.IsAllowedBaseUrl(url));
 
     [Fact]
+    public async Task RefusesToSendAKeyOverPlainHttpToAnotherHost()
+    {
+        var job = Job(Provider.Custom, model: "m", text: "Hola") with { BaseUrl = "http://example.com/v1" };
+        var ex = await Assert.ThrowsAsync<TranslateException>(() =>
+            Translator.TranslateAsync(job, TestContext.Current.CancellationToken));
+        Assert.Contains("https://", ex.Message);
+    }
+
+    [Fact]
+    public void JobToStringHidesTheKey() =>
+        Assert.DoesNotContain("secret", Job(Provider.OpenAI, text: "x").ToString());
+
+    [Fact]
     public void ReadsAnthropicTextBlocks()
     {
         const string body = """

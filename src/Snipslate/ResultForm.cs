@@ -45,8 +45,7 @@ internal sealed class ResultForm : Form
         };
         copy.Click += (_, _) =>
         {
-            Clipboard.SetText(output.Text);
-            status.Text = "Copied to the clipboard";
+            status.Text = Clip.TrySet(output.Text) ? "Copied to the clipboard" : "The clipboard is busy. Try again.";
         };
 
         var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10), BackColor = SystemColors.Window };

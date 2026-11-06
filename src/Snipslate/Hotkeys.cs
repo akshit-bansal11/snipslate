@@ -44,6 +44,13 @@ public readonly record struct Hotkey(uint Modifiers, Keys Key)
         }
 
         var keyName = parts[^1];
+
+        // Enum.TryParse reads "A, B" as a flags combination; a hotkey is one key.
+        if (keyName.Contains(','))
+        {
+            return false;
+        }
+
         if (int.TryParse(keyName, out var number))
         {
             if (keyName.Length != 1)

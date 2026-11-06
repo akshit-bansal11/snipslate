@@ -139,8 +139,14 @@ internal sealed class TrayApp : ApplicationContext
             return;
         }
 
-        Clipboard.SetText(text);
-        Notify("Text copied", $"{text.Length} characters copied to the clipboard.");
+        if (Clip.TrySet(text))
+        {
+            Notify("Text copied", $"{text.Length} characters copied to the clipboard.");
+        }
+        else
+        {
+            Notify("Clipboard busy", "Another app is holding the clipboard. Try again.", ToolTipIcon.Warning);
+        }
     }
 
     private async Task TranslateAsync(Bitmap image, Rectangle where)
@@ -178,6 +184,13 @@ internal sealed class TrayApp : ApplicationContext
             settings.TargetLanguage, png, text);
         var popup = new ResultForm(where, $"{Translator.DisplayName(settings.Provider)} · {settings.Model}");
         popup.Show();
+
+        // Not awaited: the next snip can start while this one is still being translated.
+        _ = FillAsync(popup, job);
+    }
+
+    private static async Task FillAsync(ResultForm popup, TranslateJob job)
+    {
         try
         {
             popup.ShowResult(await Translator.TranslateAsync(job, popup.Cancellation));
@@ -186,7 +199,7 @@ internal sealed class TrayApp : ApplicationContext
         {
             // The popup was closed before the reply arrived.
         }
-        catch (TranslateException ex)
+        catch (Exception ex)
         {
             popup.ShowError(ex.Message);
         }
@@ -238,4 +251,21 @@ internal sealed class TrayApp : ApplicationContext
 
     private void Notify(string title, string text, ToolTipIcon icon = ToolTipIcon.Info) =>
         tray.ShowBalloonTip(5000, title, text, icon);
+}
+
+internal static class Clip
+{
+    /// <summary>Copies text, retrying briefly when another app holds the clipboard open.</summary>
+    public static bool TrySet(string text)
+    {
+        try
+        {
+            Clipboard.SetDataObject(text, copy: true, retryTimes: 5, retryDelay: 100);
+            return true;
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            return false;
+        }
+    }
 }
