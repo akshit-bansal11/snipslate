@@ -18,4 +18,4 @@ foreach ($project in $projects) {
 }
 
 Invoke-Step @('build', 'tests/Snipslate.Tests/Snipslate.Tests.csproj', '-c', 'Release', '-warnaserror')
-Invoke-Step @('test', 'tests/Snipslate.Tests/Snipslate.Tests.csproj', '-c', 'Release', '--no-build')
+Invoke-Step @('test', '--project', 'tests/Snipslate.Tests/Snipslate.Tests.csproj', '-c', 'Release', '--no-build')
