@@ -1,9 +1,5 @@
-bin/
-obj/
+target/
 out/
-TestResults/
-.vs/
-*.user
 .env
 .env.*
 !.env.example
