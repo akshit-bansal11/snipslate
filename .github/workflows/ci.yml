@@ -44,6 +44,22 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked
 
+      # The tray process is what stays resident, so its idle memory is the number that matters.
+      # Windows and macOS runners have a desktop session; Linux would need Xvfb + a tray host.
+      - name: Measure idle memory of the tray process
+        if: runner.os != 'Linux'
+        shell: pwsh
+        run: |
+          $exe = if ($IsWindows) { 'target/release/snipslate.exe' } else { 'target/release/snipslate' }
+          $p = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 10
+          $p.Refresh()
+          if ($p.HasExited) { throw "tray process exited early with code $($p.ExitCode)" }
+          $ws = [math]::Round($p.WorkingSet64 / 1MB, 1)
+          $priv = [math]::Round($p.PrivateMemorySize64 / 1MB, 1)
+          "Tray idle on $($env:RUNNER_OS): working set $ws MB, private $priv MB" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          Stop-Process -Id $p.Id
+
       - uses: actions/upload-artifact@v7
         with:
           name: snipslate-${{ runner.os }}
