@@ -38,6 +38,10 @@ windows = { version = "0.62.2", features = [
     "Win32_UI_HiDpi",
 ] }
 
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+# Same version eframe 0.37 pins; eframe does not re-export it. Tray event loop + macOS activation policy.
+winit = { version = "0.30.13", default-features = false, features = ["rwh_06"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.5"
 objc2-foundation = { version = "0.3.2", default-features = false, features = [
