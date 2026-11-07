@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="src/Snipslate/Snipslate.csproj" />
-  <Project Path="tests/Snipslate.Tests/Snipslate.Tests.csproj" />
-</Solution>
