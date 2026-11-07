@@ -24,7 +24,7 @@ pub fn read_text(img: &image::RgbaImage) -> Result<String, String> {
 
     let (w, h) = (img.width(), img.height());
     let mut bgra = img.as_raw().clone();
-    for px in bgra.chunks_exact_mut(4) {
+    for px in bgra.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
     }
 

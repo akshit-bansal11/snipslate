@@ -131,7 +131,7 @@ fn keyring_message(e: &keyring::v1::Error) -> String {
     match e {
         Error::NoStorageAccess { .. }
         | Error::PlatformFailure { .. }
-        | Error::NoDefaultStore { .. }
+        | Error::NoDefaultStore
             if cfg!(target_os = "linux") =>
         {
             "No Secret Service (gnome-keyring or KWallet) is available to store the key."
@@ -146,7 +146,7 @@ pub fn key_get(p: Provider) -> Result<Option<String>, String> {
     match key_entry(p)?.get_password() {
         Ok(key) if key.is_empty() => Ok(None),
         Ok(key) => Ok(Some(key)),
-        Err(keyring::v1::Error::NoEntry { .. }) => Ok(None),
+        Err(keyring::v1::Error::NoEntry) => Ok(None),
         Err(e) => Err(keyring_message(&e)),
     }
 }
@@ -159,7 +159,7 @@ pub fn key_set(p: Provider, key: &str) -> Result<(), String> {
 
 pub fn key_remove(p: Provider) -> Result<(), String> {
     match key_entry(p)?.delete_credential() {
-        Ok(()) | Err(keyring::v1::Error::NoEntry { .. }) => Ok(()),
+        Ok(()) | Err(keyring::v1::Error::NoEntry) => Ok(()),
         Err(e) => Err(keyring_message(&e)),
     }
 }
@@ -239,8 +239,10 @@ mod tests {
 
     #[test]
     fn resolve_base_url_uses_custom_only_for_custom() {
-        let mut s = AppSettings::default();
-        s.custom_base_url = "https://example.test/v1".to_string();
+        let mut s = AppSettings {
+            custom_base_url: "https://example.test/v1".to_string(),
+            ..AppSettings::default()
+        };
         assert_eq!(s.resolve_base_url(), Provider::Anthropic.default_base_url());
         s.provider = Provider::Custom;
         assert_eq!(s.resolve_base_url(), "https://example.test/v1");
