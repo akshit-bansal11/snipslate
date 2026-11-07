@@ -5,18 +5,29 @@ use image::{ExtendedColorType, ImageEncoder};
 use objc2::AllocAnyThread;
 use objc2::rc::autoreleasepool;
 use objc2_foundation::{NSArray, NSData, NSDictionary};
-use objc2_vision::{VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel};
+use objc2_vision::{
+    VNImageRequestHandler, VNRecognizeTextRequest, VNRequest, VNRequestTextRecognitionLevel,
+};
 
 pub fn read_text(img: &image::RgbaImage) -> Result<String, String> {
     // Full resolution: Vision has no small input cap, and downscaling would cost accuracy.
     let mut png = Vec::new();
     PngEncoder::new(&mut png)
-        .write_image(img.as_raw(), img.width(), img.height(), ExtendedColorType::Rgba8)
+        .write_image(
+            img.as_raw(),
+            img.width(),
+            img.height(),
+            ExtendedColorType::Rgba8,
+        )
         .map_err(|e| e.to_string())?;
 
     autoreleasepool(|_| {
         let data = NSData::with_bytes(&png);
-        let handler = VNImageRequestHandler::initWithData_options(VNImageRequestHandler::alloc(), &data, &NSDictionary::new());
+        let handler = VNImageRequestHandler::initWithData_options(
+            VNImageRequestHandler::alloc(),
+            &data,
+            &NSDictionary::new(),
+        );
 
         let request = VNRecognizeTextRequest::new();
         request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);

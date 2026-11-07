@@ -54,7 +54,12 @@ const GROUPS: &[Group] = &[
     Group {
         ranges: &[(0x0600, 0x06FF), (0x0750, 0x077F)],
         lang: "ar",
-        files: &["segoeui.ttf", "tahoma.ttf", "Arial Unicode.ttf", "GeezaPro.ttc"],
+        files: &[
+            "segoeui.ttf",
+            "tahoma.ttf",
+            "Arial Unicode.ttf",
+            "GeezaPro.ttc",
+        ],
     },
     Group {
         ranges: &[(0x0900, 0x097F)],
@@ -75,7 +80,7 @@ const GROUPS: &[Group] = &[
 
 fn font_dirs() -> &'static [&'static str] {
     if cfg!(windows) {
-        &["C:\Windows\Fonts"]
+        &[r"C:\Windows\Fonts"]
     } else {
         &[
             "/System/Library/Fonts",
@@ -109,9 +114,11 @@ pub fn install_fallback_fonts(ctx: &egui::Context, text: &str) {
     let mut fonts = egui::FontDefinitions::default();
     let mut added = false;
     for (i, g) in GROUPS.iter().enumerate() {
-        let needed = text
-            .chars()
-            .any(|c| g.ranges.iter().any(|&(lo, hi)| (lo..=hi).contains(&(c as u32))));
+        let needed = text.chars().any(|c| {
+            g.ranges
+                .iter()
+                .any(|&(lo, hi)| (lo..=hi).contains(&(c as u32)))
+        });
         if !needed {
             continue;
         }

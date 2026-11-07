@@ -167,13 +167,29 @@ mod tests {
     #[test]
     fn parses() {
         let cases = [
-            ("Ctrl+Alt+T", Modifiers::CONTROL | Modifiers::ALT, Code::KeyT),
-            (" ctrl + shift + 5 ", Modifiers::CONTROL | Modifiers::SHIFT, Code::Digit5),
+            (
+                "Ctrl+Alt+T",
+                Modifiers::CONTROL | Modifiers::ALT,
+                Code::KeyT,
+            ),
+            (
+                " ctrl + shift + 5 ",
+                Modifiers::CONTROL | Modifiers::SHIFT,
+                Code::Digit5,
+            ),
             ("Win+F1", Modifiers::META, Code::F1),
-            ("Control+Alt+PrintScreen", Modifiers::CONTROL | Modifiers::ALT, Code::PrintScreen),
+            (
+                "Control+Alt+PrintScreen",
+                Modifiers::CONTROL | Modifiers::ALT,
+                Code::PrintScreen,
+            ),
         ];
         for (text, modifiers, code) in cases {
-            assert_eq!(Hotkey::parse(text), Some(Hotkey { modifiers, code }), "{text}");
+            assert_eq!(
+                Hotkey::parse(text),
+                Some(Hotkey { modifiers, code }),
+                "{text}"
+            );
         }
     }
 

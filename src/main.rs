@@ -5,8 +5,8 @@ mod hotkey;
 mod imaging;
 mod ocr;
 mod settings;
-mod tray;
 mod translator;
+mod tray;
 mod ui;
 
 use std::process::{Child, Command, Stdio};
@@ -60,7 +60,8 @@ fn main() {
             DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
         };
         // SAFETY: plain Win32 call with a valid constant, made before any window exists.
-        let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        let _ =
+            unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     }
 
     let args: Vec<String> = std::env::args().skip(1).collect();

@@ -24,7 +24,11 @@ const DEFAULT_COPY_HOTKEY: &str = "Ctrl+Alt+Shift+C";
 /// platform lookup crate only if that ever happens in practice.
 pub fn config_dir() -> PathBuf {
     let fallback = || std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let home = || std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(fallback);
+    let home = || {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(fallback)
+    };
     if cfg!(windows) {
         std::env::var_os("APPDATA")
             .map(PathBuf::from)
@@ -125,10 +129,13 @@ fn key_entry(provider: Provider) -> Result<keyring::v1::Entry, String> {
 fn keyring_message(e: &keyring::v1::Error) -> String {
     use keyring::v1::Error;
     match e {
-        Error::NoStorageAccess { .. } | Error::PlatformFailure { .. } | Error::NoDefaultStore { .. }
+        Error::NoStorageAccess { .. }
+        | Error::PlatformFailure { .. }
+        | Error::NoDefaultStore { .. }
             if cfg!(target_os = "linux") =>
         {
-            "No Secret Service (gnome-keyring or KWallet) is available to store the key.".to_string()
+            "No Secret Service (gnome-keyring or KWallet) is available to store the key."
+                .to_string()
         }
         _ => "Couldn't access the OS keychain to read or store the API key.".to_string(),
     }

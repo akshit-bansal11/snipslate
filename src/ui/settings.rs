@@ -80,7 +80,10 @@ fn find_problem(
         ));
     };
     if translate_key == copy_key {
-        return Some((Field::CopyHotkey, "The two hotkeys must be different.".into()));
+        return Some((
+            Field::CopyHotkey,
+            "The two hotkeys must be different.".into(),
+        ));
     }
     if provider == Provider::Custom && !is_allowed_base_url(base_url.trim()) {
         return Some((
@@ -92,7 +95,10 @@ fn find_problem(
         return Some((Field::Model, "Enter a model name.".into()));
     }
     if language.trim().is_empty() {
-        return Some((Field::Language, "Choose a language to translate into.".into()));
+        return Some((
+            Field::Language,
+            "Choose a language to translate into.".into(),
+        ));
     }
     None
 }
@@ -376,7 +382,8 @@ impl eframe::App for SettingsApp {
                             editable,
                             None,
                         );
-                        submit |= edit_row(ui, "Model", &mut self.model, Some(Field::Model), true, None);
+                        submit |=
+                            edit_row(ui, "Model", &mut self.model, Some(Field::Model), true, None);
                         submit |= edit_row(
                             ui,
                             "API key",
@@ -389,7 +396,9 @@ impl eframe::App for SettingsApp {
                         ui.label("");
                         ui.horizontal(|ui| {
                             let running = matches!(self.test, TestState::Running(_));
-                            test_clicked = ui.add_enabled(!running, egui::Button::new("Test")).clicked();
+                            test_clicked = ui
+                                .add_enabled(!running, egui::Button::new("Test"))
+                                .clicked();
                             if self.key_saved {
                                 forget_clicked = ui.link("Forget saved key").clicked();
                             }
@@ -421,7 +430,8 @@ impl eframe::App for SettingsApp {
                                 .id(Field::Language.id())
                                 .desired_width(FIELD_WIDTH - 110.0);
                             let response = ui.add(edit);
-                            submit |= response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            submit |= response.lost_focus()
+                                && ui.input(|i| i.key_pressed(egui::Key::Enter));
                             let _ = response.labelled_by(name.id);
                             let presets = egui::ComboBox::from_id_salt("language_presets")
                                 .selected_text("Presets")
@@ -436,7 +446,10 @@ impl eframe::App for SettingsApp {
                         ui.end_row();
 
                         ui.label("");
-                        ui.checkbox(&mut self.text_only, "Send text only (for models that can't read images)");
+                        ui.checkbox(
+                            &mut self.text_only,
+                            "Send text only (for models that can't read images)",
+                        );
                         ui.end_row();
 
                         submit |= edit_row(
@@ -558,22 +571,36 @@ mod tests {
 
     #[test]
     fn equal_hotkeys_ignoring_case() {
-        let got = check(Provider::Anthropic, "", "m", "English", "Ctrl+Alt+T", "ctrl+alt+t");
+        let got = check(
+            Provider::Anthropic,
+            "",
+            "m",
+            "English",
+            "Ctrl+Alt+T",
+            "ctrl+alt+t",
+        );
         assert_eq!(
             got,
-            Some((Field::CopyHotkey, "The two hotkeys must be different.".to_string()))
+            Some((
+                Field::CopyHotkey,
+                "The two hotkeys must be different.".to_string()
+            ))
         );
     }
 
     #[test]
     fn custom_http_remote_url_rejected() {
-        let (f, _) = check(Provider::Custom, "http://example.com", "m", "English", T, C).expect("problem");
+        let (f, _) =
+            check(Provider::Custom, "http://example.com", "m", "English", T, C).expect("problem");
         assert_eq!(f, Field::BaseUrl);
     }
 
     #[test]
     fn non_custom_provider_ignores_base_url() {
-        assert_eq!(check(Provider::OpenAI, "http://example.com", "m", "English", T, C), None);
+        assert_eq!(
+            check(Provider::OpenAI, "http://example.com", "m", "English", T, C),
+            None
+        );
     }
 
     #[test]

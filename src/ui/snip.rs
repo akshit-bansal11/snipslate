@@ -6,8 +6,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Color32, ColorImage, CursorIcon, FontId, Key, PointerButton, Pos2, Rect, ScrollArea, Stroke, StrokeKind,
-    TextEdit, TextureHandle, TextureOptions, Vec2, ViewportBuilder, ViewportCommand, WindowLevel, pos2, vec2,
+    self, Color32, ColorImage, CursorIcon, FontId, Key, PointerButton, Pos2, Rect, ScrollArea,
+    Stroke, StrokeKind, TextEdit, TextureHandle, TextureOptions, Vec2, ViewportBuilder,
+    ViewportCommand, WindowLevel, pos2, vec2,
 };
 use image::RgbaImage;
 use mouse_position::mouse_position::Mouse;
@@ -61,7 +62,12 @@ fn result_position(sel: Rect, window: Vec2, monitor: Rect) -> Pos2 {
 
 /// UV rectangle of `sel` inside the full-screen texture.
 fn uv_rect(sel: Rect, screen: Rect) -> Rect {
-    let to_uv = |p: Pos2| pos2((p.x - screen.min.x) / screen.width(), (p.y - screen.min.y) / screen.height());
+    let to_uv = |p: Pos2| {
+        pos2(
+            (p.x - screen.min.x) / screen.width(),
+            (p.y - screen.min.y) / screen.height(),
+        )
+    };
     Rect::from_min_max(to_uv(sel.min), to_uv(sel.max))
 }
 
@@ -82,16 +88,30 @@ fn capture() -> Result<Shot, String> {
         Some(m) => m,
         None => {
             let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
-            let primary = all.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0);
+            let primary = all
+                .iter()
+                .position(|m| m.is_primary().unwrap_or(false))
+                .unwrap_or(0);
             all.into_iter().nth(primary).ok_or("no monitor found")?
         }
     };
     let image = monitor.capture_image().map_err(|e| e.to_string())?;
-    let scale = monitor.scale_factor().ok().filter(|s| s.is_finite() && *s > 0.0).unwrap_or(1.0);
-    let (x, y) = (monitor.x().unwrap_or(0) as f32, monitor.y().unwrap_or(0) as f32);
+    let scale = monitor
+        .scale_factor()
+        .ok()
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .unwrap_or(1.0);
+    let (x, y) = (
+        monitor.x().unwrap_or(0) as f32,
+        monitor.y().unwrap_or(0) as f32,
+    );
     let size = vec2(image.width() as f32 / scale, image.height() as f32 / scale);
     // xcap reports macOS origins in points already, Windows/Linux origins in physical pixels.
-    let pos = if cfg!(target_os = "macos") { pos2(x, y) } else { pos2(x / scale, y / scale) };
+    let pos = if cfg!(target_os = "macos") {
+        pos2(x, y)
+    } else {
+        pos2(x / scale, y / scale)
+    };
     Ok(Shot { image, pos, size })
 }
 
@@ -109,12 +129,17 @@ pub fn run(mode: Mode) -> i32 {
             Ok(None) | Err(_) if cfg.provider == Provider::Custom => {}
             Ok(None) => {
                 drop(lock);
-                let hint = format!("Snipslate needs a {} API key to translate.", cfg.provider.display_name());
+                let hint = format!(
+                    "Snipslate needs a {} API key to translate.",
+                    cfg.provider.display_name()
+                );
                 match crate::spawn_self(&["--settings", &hint]) {
                     Ok(mut child) => {
                         let _ = child.wait();
                     }
-                    Err(e) => crate::show_message("Snipslate", &format!("Couldn't open settings: {e}")),
+                    Err(e) => {
+                        crate::show_message("Snipslate", &format!("Couldn't open settings: {e}"))
+                    }
                 }
                 return 0;
             }
@@ -143,12 +168,25 @@ pub fn run(mode: Mode) -> i32 {
         .with_title("Snipslate: select an area")
         .with_position(shot.pos);
     // macOS native fullscreen makes a new Space and animates, so use a borderless window the size of the monitor.
-    builder = if cfg!(target_os = "macos") { builder.with_inner_size(shot.size) } else { builder.with_fullscreen(true) };
+    builder = if cfg!(target_os = "macos") {
+        builder.with_inner_size(shot.size)
+    } else {
+        builder.with_fullscreen(true)
+    };
 
     let result = eframe::run_native(
         "Snipslate",
         ui::native_options(builder),
-        Box::new(move |cc| Ok(Box::new(SnipApp::new(&cc.egui_ctx, mode, cfg, key, lock, shot.image)))),
+        Box::new(move |cc| {
+            Ok(Box::new(SnipApp::new(
+                &cc.egui_ctx,
+                mode,
+                cfg,
+                key,
+                lock,
+                shot.image,
+            )))
+        }),
     );
     match result {
         Ok(()) => 0,
@@ -199,10 +237,21 @@ struct SnipApp {
 }
 
 impl SnipApp {
-    fn new(ctx: &egui::Context, mode: Mode, cfg: AppSettings, key: String, lock: Option<File>, image: RgbaImage) -> Self {
+    fn new(
+        ctx: &egui::Context,
+        mode: Mode,
+        cfg: AppSettings,
+        key: String,
+        lock: Option<File>,
+        image: RgbaImage,
+    ) -> Self {
         // Uploaded once; ponytail: a monitor wider than the GPU's max texture size (commonly 16384 px) fails here.
         let size = [image.width() as usize, image.height() as usize];
-        let tex = ctx.load_texture("shot", ColorImage::from_rgba_unmultiplied(size, image.as_raw()), TextureOptions::LINEAR);
+        let tex = ctx.load_texture(
+            "shot",
+            ColorImage::from_rgba_unmultiplied(size, image.as_raw()),
+            TextureOptions::LINEAR,
+        );
         let header = format!("{} \u{b7} {}", cfg.provider.display_name(), cfg.model);
         Self {
             mode,
@@ -223,7 +272,12 @@ impl SnipApp {
         }
     }
 
-    fn spawn(&mut self, ctx: &egui::Context, label: &'static str, work: impl FnOnce() -> Outcome + Send + 'static) {
+    fn spawn(
+        &mut self,
+        ctx: &egui::Context,
+        label: &'static str,
+        work: impl FnOnce() -> Outcome + Send + 'static,
+    ) {
         let (tx, rx) = mpsc::channel();
         self.rx = Some(rx);
         self.phase = Phase::Busy(label);
@@ -235,15 +289,21 @@ impl SnipApp {
     }
 
     fn start_copy(&mut self, ctx: &egui::Context, crop: RgbaImage) {
-        self.spawn(ctx, "Reading text\u{2026}", move || match ocr::read_text(&crop) {
-            Err(e) => Outcome::Failed(e),
-            Ok(t) if t.is_empty() => {
-                if imaging::is_mostly_black(&crop) { Outcome::Black } else { Outcome::NoText }
-            }
-            Ok(t) => match clip::set_text(&t) {
-                Ok(()) => Outcome::Copied(t.chars().count()),
+        self.spawn(ctx, "Reading text\u{2026}", move || {
+            match ocr::read_text(&crop) {
                 Err(e) => Outcome::Failed(e),
-            },
+                Ok(t) if t.is_empty() => {
+                    if imaging::is_mostly_black(&crop) {
+                        Outcome::Black
+                    } else {
+                        Outcome::NoText
+                    }
+                }
+                Ok(t) => match clip::set_text(&t) {
+                    Ok(()) => Outcome::Copied(t.chars().count()),
+                    Err(e) => Outcome::Failed(e),
+                },
+            }
         });
     }
 
@@ -284,7 +344,9 @@ impl SnipApp {
         self.rx = None;
         match &outcome {
             Outcome::Translated(t) | Outcome::Failed(t) => ui::install_fallback_fonts(ctx, t),
-            Outcome::Copied(_) | Outcome::NoText | Outcome::Black => self.close_at = Some(Instant::now() + AUTO_CLOSE),
+            Outcome::Copied(_) | Outcome::NoText | Outcome::Black => {
+                self.close_at = Some(Instant::now() + AUTO_CLOSE)
+            }
         }
         self.phase = Phase::Done(outcome);
     }
@@ -293,7 +355,9 @@ impl SnipApp {
     fn finish_selection(&mut self, ctx: &egui::Context, sel: Rect, screen: Rect) {
         let Some(full) = self.shot.take() else { return };
         self.lock = None;
-        let Some((x, y, w, h)) = selection_to_pixels(sel, screen, [full.image.width(), full.image.height()]) else {
+        let Some((x, y, w, h)) =
+            selection_to_pixels(sel, screen, [full.image.width(), full.image.height()])
+        else {
             ctx.send_viewport_cmd(ViewportCommand::Close);
             return;
         };
@@ -337,7 +401,10 @@ impl SnipApp {
             (
                 i.key_pressed(Key::Escape),
                 i.pointer.button_pressed(PointerButton::Secondary),
-                i.pointer.primary_pressed().then(|| i.pointer.press_origin()).flatten(),
+                i.pointer
+                    .primary_pressed()
+                    .then(|| i.pointer.press_origin())
+                    .flatten(),
                 i.pointer.latest_pos(),
                 i.pointer.primary_down(),
                 i.pointer.primary_released(),
@@ -367,7 +434,8 @@ impl SnipApp {
             painter.image(id, sel, uv_rect(sel, screen), Color32::WHITE);
             painter.rect_stroke(sel, 0.0, Stroke::new(2.0, ACCENT), StrokeKind::Outside);
         } else if self.drag_start.is_none() {
-            let galley = painter.layout_no_wrap(HINT.to_owned(), FontId::proportional(16.0), Color32::WHITE);
+            let galley =
+                painter.layout_no_wrap(HINT.to_owned(), FontId::proportional(16.0), Color32::WHITE);
             let at = pos2(screen.center().x, screen.min.y + 44.0);
             let pill = Rect::from_center_size(at, galley.size()).expand2(vec2(14.0, 7.0));
             painter.rect_filled(pill, 8.0, Color32::from_black_alpha(190));
@@ -413,7 +481,9 @@ impl SnipApp {
         let translate = self.mode == Mode::Translate;
         let mut copy_text: Option<String> = None;
         let mut close = false;
-        let Phase::Done(outcome) = &self.phase else { return };
+        let Phase::Done(outcome) = &self.phase else {
+            return;
+        };
 
         if translate {
             ui.weak(&self.header);
@@ -427,27 +497,49 @@ impl SnipApp {
                 ui.label("No text found");
             }
             Outcome::Black => {
-                ui.label(format!("Nothing to read: that area is black. {DRM} can't be captured."));
+                ui.label(format!(
+                    "Nothing to read: that area is black. {DRM} can't be captured."
+                ));
             }
             Outcome::Translated(text) => {
-                ScrollArea::vertical().max_height(body_h).auto_shrink([false, false]).show(ui, |ui| {
-                    let mut shown: &str = text;
-                    ui.add(TextEdit::multiline(&mut shown).desired_width(f32::INFINITY).frame(false));
-                });
+                ScrollArea::vertical()
+                    .max_height(body_h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        let mut shown: &str = text;
+                        ui.add(
+                            TextEdit::multiline(&mut shown)
+                                .desired_width(f32::INFINITY)
+                                .frame(false),
+                        );
+                    });
             }
             Outcome::Failed(msg) => {
-                ScrollArea::vertical().max_height(body_h).auto_shrink([false, false]).show(ui, |ui| {
-                    ui.colored_label(ERROR, msg);
-                });
+                ScrollArea::vertical()
+                    .max_height(body_h)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.colored_label(ERROR, msg);
+                    });
             }
         }
-        let auto = matches!(outcome, Outcome::Copied(_) | Outcome::NoText | Outcome::Black);
+        let auto = matches!(
+            outcome,
+            Outcome::Copied(_) | Outcome::NoText | Outcome::Black
+        );
         if !auto {
             ui.separator();
             ui.horizontal(|ui| {
                 if translate {
-                    let text = if let Outcome::Translated(t) = outcome { Some(t) } else { None };
-                    if ui.add_enabled(text.is_some(), egui::Button::new("Copy")).clicked() {
+                    let text = if let Outcome::Translated(t) = outcome {
+                        Some(t)
+                    } else {
+                        None
+                    };
+                    if ui
+                        .add_enabled(text.is_some(), egui::Button::new("Copy"))
+                        .clicked()
+                    {
                         copy_text = text.cloned();
                     }
                 }
@@ -533,58 +625,91 @@ mod tests {
     #[test]
     fn pixels_identity_at_scale_one() {
         let screen = rect(0.0, 0.0, 1000.0, 500.0);
-        assert_eq!(selection_to_pixels(rect(10.0, 20.0, 110.0, 70.0), screen, [1000, 500]), Some((10, 20, 100, 50)));
+        assert_eq!(
+            selection_to_pixels(rect(10.0, 20.0, 110.0, 70.0), screen, [1000, 500]),
+            Some((10, 20, 100, 50))
+        );
     }
 
     #[test]
     fn pixels_scale_with_dpi() {
         let screen = rect(0.0, 0.0, 1000.0, 500.0);
-        assert_eq!(selection_to_pixels(rect(10.0, 20.0, 110.0, 70.0), screen, [2000, 1000]), Some((20, 40, 200, 100)));
+        assert_eq!(
+            selection_to_pixels(rect(10.0, 20.0, 110.0, 70.0), screen, [2000, 1000]),
+            Some((20, 40, 200, 100))
+        );
     }
 
     #[test]
     fn pixels_clamped_to_image() {
         let screen = rect(0.0, 0.0, 100.0, 100.0);
-        assert_eq!(selection_to_pixels(rect(-20.0, 50.0, 300.0, 400.0), screen, [100, 100]), Some((0, 50, 100, 50)));
+        assert_eq!(
+            selection_to_pixels(rect(-20.0, 50.0, 300.0, 400.0), screen, [100, 100]),
+            Some((0, 50, 100, 50))
+        );
     }
 
     #[test]
     fn pixels_too_small_is_none() {
         let screen = rect(0.0, 0.0, 100.0, 100.0);
-        assert_eq!(selection_to_pixels(rect(10.0, 10.0, 13.0, 90.0), screen, [100, 100]), None);
-        assert_eq!(selection_to_pixels(rect(10.0, 10.0, 90.0, 13.0), screen, [100, 100]), None);
+        assert_eq!(
+            selection_to_pixels(rect(10.0, 10.0, 13.0, 90.0), screen, [100, 100]),
+            None
+        );
+        assert_eq!(
+            selection_to_pixels(rect(10.0, 10.0, 90.0, 13.0), screen, [100, 100]),
+            None
+        );
     }
 
     #[test]
     fn pixels_off_origin_screen() {
         let screen = rect(100.0, 50.0, 200.0, 150.0);
-        assert_eq!(selection_to_pixels(rect(110.0, 60.0, 150.0, 100.0), screen, [200, 200]), Some((20, 20, 80, 80)));
+        assert_eq!(
+            selection_to_pixels(rect(110.0, 60.0, 150.0, 100.0), screen, [200, 200]),
+            Some((20, 20, 80, 80))
+        );
     }
 
     #[test]
     fn uv_maps_into_unit_square() {
-        let uv = uv_rect(rect(100.0, 50.0, 150.0, 100.0), rect(100.0, 50.0, 200.0, 150.0));
+        let uv = uv_rect(
+            rect(100.0, 50.0, 150.0, 100.0),
+            rect(100.0, 50.0, 200.0, 150.0),
+        );
         assert_eq!(uv, rect(0.0, 0.0, 0.5, 0.5));
     }
 
     #[test]
     fn position_below_when_it_fits() {
         let monitor = rect(0.0, 0.0, 1920.0, 1080.0);
-        let p = result_position(rect(100.0, 100.0, 300.0, 200.0), vec2(440.0, 220.0), monitor);
+        let p = result_position(
+            rect(100.0, 100.0, 300.0, 200.0),
+            vec2(440.0, 220.0),
+            monitor,
+        );
         assert_eq!(p, pos2(100.0, 208.0));
     }
 
     #[test]
     fn position_above_when_below_does_not_fit() {
         let monitor = rect(0.0, 0.0, 1920.0, 1080.0);
-        let p = result_position(rect(100.0, 900.0, 300.0, 1000.0), vec2(440.0, 220.0), monitor);
+        let p = result_position(
+            rect(100.0, 900.0, 300.0, 1000.0),
+            vec2(440.0, 220.0),
+            monitor,
+        );
         assert_eq!(p, pos2(100.0, 672.0));
     }
 
     #[test]
     fn position_clamped_at_right_edge_and_top() {
         let monitor = rect(0.0, 0.0, 1920.0, 1080.0);
-        let p = result_position(rect(1800.0, 10.0, 1900.0, 1070.0), vec2(440.0, 220.0), monitor);
+        let p = result_position(
+            rect(1800.0, 10.0, 1900.0, 1070.0),
+            vec2(440.0, 220.0),
+            monitor,
+        );
         assert_eq!(p, pos2(1480.0, 0.0));
     }
 }

@@ -2,7 +2,7 @@
 name = "snipslate"
 version = "0.2.0"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.95"
 description = "Snip any part of the screen to copy its text or translate it with AI"
 license = "MIT"
 

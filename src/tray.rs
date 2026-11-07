@@ -40,7 +40,11 @@ fn icon_rgba() -> Vec<u8> {
             let (mx, my) = (x.min(SIZE - 1 - x), y.min(SIZE - 1 - y));
             let bracket = ((7..14).contains(&mx) && (7..9).contains(&my))
                 || ((7..9).contains(&mx) && (7..14).contains(&my));
-            let (r, g, b) = if bracket { (255, 255, 255) } else { (0x25, 0x63, 0xeb) };
+            let (r, g, b) = if bracket {
+                (255, 255, 255)
+            } else {
+                (0x25, 0x63, 0xeb)
+            };
             rgba.extend_from_slice(&[r, g, b, 255]);
         }
     }
@@ -55,8 +59,13 @@ fn launch(args: &[&str], waker: &Waker) {
             thread::spawn(move || {
                 match child.wait() {
                     Ok(status) if !status.success() => {
-                        let code = status.code().map_or("unknown".to_owned(), |c| c.to_string());
-                        show_message("Snipslate", &format!("Something went wrong (exit code {code})."));
+                        let code = status
+                            .code()
+                            .map_or("unknown".to_owned(), |c| c.to_string());
+                        show_message(
+                            "Snipslate",
+                            &format!("Something went wrong (exit code {code})."),
+                        );
                     }
                     Ok(_) => {}
                     Err(e) => eprintln!("snipslate: waiting for a child failed: {e}"),
@@ -184,12 +193,21 @@ impl Tray {
     }
 
     fn apply(&mut self, settings: &AppSettings) {
-        self.keys = (settings.translate_hotkey.clone(), settings.copy_hotkey.clone());
+        self.keys = (
+            settings.translate_hotkey.clone(),
+            settings.copy_hotkey.clone(),
+        );
         let label = |name: &str, keys: &str| {
-            if hotkeys_supported() { format!("{name}  ({keys})") } else { name.to_owned() }
+            if hotkeys_supported() {
+                format!("{name}  ({keys})")
+            } else {
+                name.to_owned()
+            }
         };
-        self.translate_item.set_text(label("Translate an area", &self.keys.0));
-        self.copy_item.set_text(label("Copy text from an area", &self.keys.1));
+        self.translate_item
+            .set_text(label("Translate an area", &self.keys.0));
+        self.copy_item
+            .set_text(label("Copy text from an area", &self.keys.1));
         if !hotkeys_supported() {
             return;
         }

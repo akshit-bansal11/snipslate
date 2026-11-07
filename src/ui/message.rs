@@ -15,9 +15,11 @@ impl eframe::App for MessageApp {
                 || i.key_pressed(egui::Key::Space)
         });
         egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().max_height(70.0).show(ui, |ui| {
-                ui.label(self.text.as_str());
-            });
+            egui::ScrollArea::vertical()
+                .max_height(70.0)
+                .show(ui, |ui| {
+                    ui.label(self.text.as_str());
+                });
             ui.add_space(8.0);
             let ok = ui.button("OK");
             if self.focus_ok {

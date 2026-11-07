@@ -17,7 +17,8 @@ pub fn read_text(img: &image::RgbaImage) -> Result<String, String> {
     // initialised (possibly in another mode), which is fine for blocking calls here.
     let _ = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
 
-    let engine = OcrEngine::TryCreateFromUserProfileLanguages().map_err(|_| NO_LANGUAGE.to_string())?;
+    let engine =
+        OcrEngine::TryCreateFromUserProfileLanguages().map_err(|_| NO_LANGUAGE.to_string())?;
     let max = OcrEngine::MaxImageDimension().map_err(err)?;
     let img = imaging::fit_long_edge(img, max);
 
@@ -32,9 +33,15 @@ pub fn read_text(img: &image::RgbaImage) -> Result<String, String> {
     let buffer = writer.DetachBuffer().map_err(err)?;
     let width = i32::try_from(w).map_err(|e| e.to_string())?;
     let height = i32::try_from(h).map_err(|e| e.to_string())?;
-    let bitmap = SoftwareBitmap::CreateCopyFromBuffer(&buffer, BitmapPixelFormat::Bgra8, width, height).map_err(err)?;
+    let bitmap =
+        SoftwareBitmap::CreateCopyFromBuffer(&buffer, BitmapPixelFormat::Bgra8, width, height)
+            .map_err(err)?;
 
-    let result = engine.RecognizeAsync(&bitmap).map_err(err)?.join().map_err(err)?;
+    let result = engine
+        .RecognizeAsync(&bitmap)
+        .map_err(err)?
+        .join()
+        .map_err(err)?;
     let mut lines = Vec::new();
     for line in result.Lines().map_err(err)? {
         lines.push(line.Text().map_err(err)?.to_string());
