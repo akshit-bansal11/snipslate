@@ -56,9 +56,17 @@ jobs:
           $p.Refresh()
           if ($p.HasExited) { throw "tray process exited early with code $($p.ExitCode)" }
           $ws = [math]::Round($p.WorkingSet64 / 1MB, 1)
-          $priv = [math]::Round($p.PrivateMemorySize64 / 1MB, 1)
-          "Tray idle on $($env:RUNNER_OS): working set $ws MB, private $priv MB" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          if ($IsWindows) {
+            $priv = [math]::Round($p.PrivateMemorySize64 / 1MB, 1)
+            "Tray idle on Windows: working set $ws MB, private $priv MB" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          } else {
+            # RSS on macOS counts shared AppKit pages; phys_footprint is what Activity Monitor calls Memory.
+            $fp = (footprint $p.Id 2>&1 | Select-String -Pattern 'phys_footprint:' | Select-Object -First 1)
+            "Tray idle on macOS: RSS $ws MB, $fp" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          }
           Stop-Process -Id $p.Id
+          # ponytail: Windows-only budget, about 2x the first measured 11.9 MB; add one for macOS once footprint has a baseline.
+          if ($IsWindows -and $ws -gt 25) { throw "tray idle working set $ws MB is over the 25 MB budget" }
 
       - uses: actions/upload-artifact@v7
         with:
