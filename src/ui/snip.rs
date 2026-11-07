@@ -76,6 +76,8 @@ struct Shot {
     /// Monitor origin and size in egui points, used to place and size the overlay window.
     pos: Pos2,
     size: Vec2,
+    /// Monitor rect in physical pixels (x, y, w, h); only the Windows overlay is placed with it.
+    phys: (i32, i32, i32, i32),
 }
 
 fn scale_of(m: &xcap::Monitor) -> f32 {
@@ -149,7 +151,18 @@ fn capture() -> Result<Shot, String> {
     } else {
         pos2(x, y)
     };
-    Ok(Shot { image, pos, size })
+    let phys = (
+        monitor.x().unwrap_or(0),
+        monitor.y().unwrap_or(0),
+        image.width() as i32,
+        image.height() as i32,
+    );
+    Ok(Shot {
+        image,
+        pos,
+        size,
+        phys,
+    })
 }
 
 pub fn run(mode: Mode) -> i32 {
@@ -204,12 +217,15 @@ pub fn run(mode: Mode) -> i32 {
         .with_visible(false)
         .with_title("Snipslate: select an area")
         .with_position(shot.pos);
-    // macOS native fullscreen makes a new Space and animates, so use a borderless window the size of the monitor.
-    builder = if cfg!(target_os = "macos") {
-        builder.with_inner_size(shot.size)
-    } else {
+    // macOS native fullscreen makes a new Space and animates; on Windows a topmost GL window that exactly
+    // covers a monitor is promoted to exclusive fullscreen (display mode change, HDR toggles).
+    // Both use a borderless window instead; Windows is placed in physical pixels by `place_overlay`.
+    builder = if cfg!(target_os = "linux") {
         builder.with_fullscreen(true)
+    } else {
+        builder.with_inner_size(shot.size)
     };
+    let phys = shot.phys;
 
     let result = eframe::run_native(
         "Snipslate",
@@ -222,6 +238,7 @@ pub fn run(mode: Mode) -> i32 {
                 key,
                 lock,
                 shot.image,
+                phys,
             )))
         }),
     );
@@ -274,7 +291,45 @@ struct SnipApp {
     /// Result-window size, position and min-size flag, held until fullscreen has really ended.
     pending: Option<(Vec2, Pos2, bool)>,
     pending_frames: u32,
+    phys: (i32, i32, i32, i32),
 }
+
+/// Puts the hidden overlay exactly over its monitor in physical pixels, one row taller.
+/// Logical placement through winit misplaces it on mixed-DPI setups.
+#[cfg(windows)]
+fn place_overlay(frame: &eframe::Frame, (x, y, w, h): (i32, i32, i32, i32)) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SetWindowPos,
+    };
+    use winit::raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+
+    let Ok(handle) = frame.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::Win32(win) = handle.as_raw() else {
+        return;
+    };
+    let hwnd = HWND(win.hwnd.get() as *mut _);
+    // ponytail: 1 px overhang beats the fullscreen-promotion heuristic; it may show on a monitor stacked directly below.
+    // SAFETY: `hwnd` is the live window of `frame`, and SetWindowPos only reads its integer arguments.
+    let placed = unsafe {
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            x,
+            y,
+            w,
+            h + 1,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+        )
+    };
+    if let Err(e) = placed {
+        eprintln!("snipslate: SetWindowPos failed: {e}");
+    }
+}
+#[cfg(not(windows))]
+fn place_overlay(_frame: &eframe::Frame, _phys: (i32, i32, i32, i32)) {}
 
 /// Frames to wait for the window manager to leave fullscreen before resizing anyway.
 const FULLSCREEN_WAIT_FRAMES: u32 = 10;
@@ -287,6 +342,7 @@ impl SnipApp {
         key: String,
         lock: Option<File>,
         image: RgbaImage,
+        phys: (i32, i32, i32, i32),
     ) -> Self {
         // Uploaded once; ponytail: a monitor wider than the GPU's max texture size (commonly 16384 px) fails here.
         let size = [image.width() as usize, image.height() as usize];
@@ -314,6 +370,7 @@ impl SnipApp {
             focus_set: false,
             pending: None,
             pending_frames: 0,
+            phys,
         }
     }
 
@@ -417,10 +474,10 @@ impl SnipApp {
         };
         let pos = result_position(sel.translate(offset), size, outer);
         // Leaving fullscreen is asynchronous, so the geometry waits (see `apply_pending`).
-        // macOS never entered native fullscreen, so there is nothing to leave.
+        // Only Linux enters fullscreen; macOS and Windows use a plain borderless window.
         let min = self.mode == Mode::Translate;
         ctx.send_viewport_cmd(ViewportCommand::Decorations(true));
-        if cfg!(target_os = "macos") {
+        if !cfg!(target_os = "linux") {
             Self::send_geometry(ctx, size, pos, min);
         } else {
             ctx.send_viewport_cmd(ViewportCommand::Fullscreen(false));
@@ -465,7 +522,15 @@ impl SnipApp {
     }
 
     fn select_ui(&mut self, ctx: &egui::Context, painter: &egui::Painter) {
-        let screen = ctx.content_rect();
+        // On Windows the window is one physical row taller than the monitor, so map only the monitor's part.
+        let content = ctx.content_rect();
+        let screen = match &self.shot {
+            Some(full) if cfg!(windows) => {
+                let px = vec2(full.image.width() as f32, full.image.height() as f32);
+                Rect::from_min_size(content.min, px / ctx.pixels_per_point())
+            }
+            _ => content,
+        };
         let (esc, right, pressed, latest, down, released) = ctx.input(|i| {
             (
                 i.key_pressed(Key::Escape),
@@ -635,10 +700,13 @@ impl SnipApp {
 }
 
 impl eframe::App for SnipApp {
-    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // Runs even while the window is hidden, so the first pass can reveal it after the texture is ready.
         if !self.shown {
             self.shown = true;
+            if cfg!(windows) {
+                place_overlay(frame, self.phys);
+            }
             ctx.send_viewport_cmd(ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(ViewportCommand::Focus);
             ctx.request_repaint();
