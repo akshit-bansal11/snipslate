@@ -135,7 +135,8 @@ fn capture() -> Result<Shot, String> {
             all.into_iter().nth(primary).ok_or("no monitor found")?
         }
     };
-    let image = monitor.capture_image().map_err(|e| e.to_string())?;
+    let mut image = monitor.capture_image().map_err(|e| e.to_string())?;
+    imaging::make_opaque(&mut image);
     let scale = scale_of(&monitor);
     let (x, y) = (
         monitor.x().unwrap_or(0) as f32,

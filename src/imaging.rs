@@ -56,10 +56,25 @@ pub fn to_png(img: &RgbaImage) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// Screen pixels are opaque. GDI leaves the fourth byte undefined (0 with HDR on), and
+/// xcap only fixes that on Windows 7, so a raw capture can be partly transparent.
+pub fn make_opaque(img: &mut RgbaImage) {
+    for px in img.pixels_mut() {
+        px.0[3] = 255;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use image::Rgba;
+
+    #[test]
+    fn make_opaque_keeps_colour_and_sets_alpha() {
+        let mut img = RgbaImage::from_pixel(3, 2, Rgba([10, 20, 30, 0]));
+        make_opaque(&mut img);
+        assert!(img.pixels().all(|p| p.0 == [10, 20, 30, 255]));
+    }
 
     const BLACK: Rgba<u8> = Rgba([0, 0, 0, 255]);
     const WHITE: Rgba<u8> = Rgba([255, 255, 255, 255]);
