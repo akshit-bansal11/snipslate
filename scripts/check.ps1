@@ -4,18 +4,14 @@ param([switch]$Ci)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-$projects = @('src/Snipslate/Snipslate.csproj', 'tests/Snipslate.Tests/Snipslate.Tests.csproj')
-
 function Invoke-Step([string[]]$Arguments) {
-    Write-Host "> dotnet $($Arguments -join ' ')"
-    & dotnet @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "dotnet $($Arguments -join ' ') failed with exit code $LASTEXITCODE" }
+    Write-Host "> cargo $($Arguments -join ' ')"
+    & cargo @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "cargo $($Arguments -join ' ') failed with exit code $LASTEXITCODE" }
 }
 
-foreach ($project in $projects) {
-    if ($Ci) { Invoke-Step @('format', $project, '--verify-no-changes') }
-    else { Invoke-Step @('format', $project) }
-}
+if ($Ci) { Invoke-Step @('fmt', '--check') }
+else { Invoke-Step @('fmt') }
 
-Invoke-Step @('build', 'tests/Snipslate.Tests/Snipslate.Tests.csproj', '-c', 'Release', '-warnaserror')
-Invoke-Step @('test', '--project', 'tests/Snipslate.Tests/Snipslate.Tests.csproj', '-c', 'Release', '--no-build')
+Invoke-Step @('clippy', '--all-targets', '--locked', '--', '-D', 'warnings')
+Invoke-Step @('test', '--locked')

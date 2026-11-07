@@ -8,11 +8,13 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    runs-on: windows-latest
-    timeout-minutes: 25
-    permissions:
-      contents: write
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
     env:
       TAG: ${{ github.ref_name }}
     steps:
@@ -20,32 +22,83 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
+      - name: Install build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libclang-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libxcb1-dev libxcb-shm0-dev libxcb-randr0-dev libxcb-xfixes0-dev libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev libxi-dev libdbus-1-dev libpipewire-0.3-dev libgbm-dev libwayland-dev libegl-dev libgl1-mesa-dev
+
+      - name: Rust components
+        run: rustup component add rustfmt clippy
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Quality gate
         shell: pwsh
         run: ./scripts/check.ps1 -Ci
 
-      - name: Publish, rename, checksum
-        shell: pwsh
+      - name: Build and package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
         run: |
-          $version = $env:TAG.TrimStart('v')
-          dotnet publish src/Snipslate/Snipslate.csproj -c Release -r win-x64 --self-contained `
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:EnableCompressionInSingleFile=true -p:Version=$version -o out
-          if ($LASTEXITCODE -ne 0) { throw "publish failed" }
-          $exe = "Snipslate-$version.exe"
-          Move-Item out/Snipslate.exe "out/$exe"
-          $hash = (Get-FileHash "out/$exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          [IO.File]::WriteAllText("out/SHA256SUMS.txt", "$hash  $exe`n")
-          "EXE=out/$exe" >> $env:GITHUB_ENV
+          VERSION="${TAG#v}"
+          cargo build --release --locked
+          mkdir out
+          cp target/release/snipslate.exe "out/Snipslate-$VERSION-windows-x64.exe"
 
-      - name: Publish the release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Build and package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
         run: |
-          gh release create $env:TAG $env:EXE out/SHA256SUMS.txt --verify-tag --title "Snipslate $($env:TAG.TrimStart('v'))" --generate-notes
-          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+          VERSION="${TAG#v}"
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+          mkdir -p Snipslate.app/Contents/MacOS out
+          lipo -create -output Snipslate.app/Contents/MacOS/snipslate             target/aarch64-apple-darwin/release/snipslate             target/x86_64-apple-darwin/release/snipslate
+          sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > Snipslate.app/Contents/Info.plist
+          codesign --force --deep -s - Snipslate.app
+          ditto -c -k --keepParent Snipslate.app "out/Snipslate-$VERSION-macos-universal.zip"
+
+      - name: Build and package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          VERSION="${TAG#v}"
+          cargo build --release --locked
+          mkdir out
+          cp LICENSE target/release/
+          tar -czf "out/Snipslate-$VERSION-linux-x64.tar.gz" -C target/release snipslate LICENSE
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: asset-${{ runner.os }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: asset-*
+          path: out
+          merge-multiple: true
+
+      - name: Checksums and release
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          cd out
+          sha256sum Snipslate-* > SHA256SUMS.txt
+          cd ..
+          test "$(ls out | wc -l)" -eq 4
+          gh release create "$TAG" out/* --repo "$REPO" --verify-tag --title "Snipslate $VERSION" --generate-notes

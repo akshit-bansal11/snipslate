@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Snipslate</string>
+    <key>CFBundleDisplayName</key>
+    <string>Snipslate</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.github.akshit-bansal11.snipslate</string>
+    <key>CFBundleExecutable</key>
+    <string>snipslate</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Snipslate captures the screen area you select so it can read or translate its text.</string>
+</dict>
+</plist>
