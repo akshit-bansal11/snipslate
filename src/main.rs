@@ -25,8 +25,14 @@ pub(crate) fn spawn_self(args: &[&str]) -> std::io::Result<Child> {
 
 /// Shows a message box by spawning the `--message` child.
 pub(crate) fn show_message(title: &str, text: &str) {
-    if let Err(e) = spawn_self(&["--message", title, text]) {
-        eprintln!("snipslate: could not show message \"{title}\": {e}");
+    match spawn_self(&["--message", title, text]) {
+        // Reaped on a thread so a long-lived tray does not collect zombies on Unix.
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(e) => eprintln!("snipslate: could not show message \"{title}\": {e}"),
     }
 }
 

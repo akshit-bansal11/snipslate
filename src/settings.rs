@@ -1,5 +1,5 @@
 use std::fs::{self, File, OpenOptions, TryLockError};
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -112,7 +112,10 @@ impl AppSettings {
         fs::create_dir_all(config_dir()).map_err(save_err)?;
         let path = config_dir().join(SETTINGS_FILE);
         let temp = config_dir().join(format!("{SETTINGS_FILE}.tmp"));
-        fs::write(&temp, json).map_err(save_err)?;
+        let mut file = File::create(&temp).map_err(save_err)?;
+        file.write_all(json.as_bytes()).map_err(save_err)?;
+        file.sync_all().map_err(save_err)?;
+        drop(file);
         fs::rename(&temp, &path).map_err(save_err)
     }
 

@@ -113,7 +113,8 @@ impl Tray {
         let icon = Icon::from_rgba(icon_rgba(), SIZE, SIZE).map_err(|e| e.to_string())?;
         let tray = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
-            .with_menu_on_left_click(false)
+            // macOS convention: a left click opens the menu; elsewhere it translates (below).
+            .with_menu_on_left_click(cfg!(target_os = "macos"))
             .with_tooltip("Snipslate")
             .with_icon(icon)
             .build()
@@ -138,13 +139,14 @@ impl Tray {
 
         let click_waker = Arc::clone(&waker);
         TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
-            // Left click translates, as the C# tray did on double click. Windows and
-            // macOS only; the Linux indicator backend sends no click events.
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
+            // Left click translates on Windows, as the C# tray did on double click. macOS opens
+            // the menu instead; the Linux indicator backend sends no click events.
+            if cfg!(windows)
+                && let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
             {
                 launch(TRANSLATE, &click_waker);
             }
@@ -221,11 +223,16 @@ impl Tray {
             }
         }
         let texts = [self.keys.0.clone(), self.keys.1.clone()];
-        let mut failed = Vec::new();
+        let (mut invalid, mut failed) = (Vec::new(), Vec::new());
         for (slot, text) in texts.iter().enumerate() {
-            self.registered[slot] = self.register(text);
-            if self.registered[slot].is_none() {
-                failed.push(text.as_str());
+            match Hotkey::parse(text) {
+                None => invalid.push(text.as_str()),
+                Some(parsed) => {
+                    self.registered[slot] = self.register(parsed.to_hot_key());
+                    if self.registered[slot].is_none() {
+                        failed.push(text.as_str());
+                    }
+                }
             }
         }
         // ponytail: a HotKey id is a hash, so two different keys could collide; ignored (2^-32).
@@ -233,6 +240,14 @@ impl Tray {
             self.registered[0].map(|h| h.id()),
             self.registered[1].map(|h| h.id()),
         );
+        for text in invalid {
+            show_message(
+                "Hotkey unavailable",
+                &format!(
+                    "\"{text}\" isn't a valid hotkey. Pick another in Settings; the tray menu still works."
+                ),
+            );
+        }
         if !failed.is_empty() {
             show_message(
                 "Hotkey unavailable",
@@ -244,9 +259,8 @@ impl Tray {
         }
     }
 
-    /// `None` when the text does not parse or the OS refuses the combination.
-    fn register(&self, text: &str) -> Option<HotKey> {
-        let hotkey = Hotkey::parse(text)?.to_hot_key();
+    /// `None` when the OS refuses the combination.
+    fn register(&self, hotkey: HotKey) -> Option<HotKey> {
         self.manager.as_ref()?.register(hotkey).ok()?;
         Some(hotkey)
     }

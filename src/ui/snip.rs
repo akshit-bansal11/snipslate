@@ -78,13 +78,53 @@ struct Shot {
     size: Vec2,
 }
 
+fn scale_of(m: &xcap::Monitor) -> f32 {
+    m.scale_factor()
+        .ok()
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .unwrap_or(1.0)
+}
+
+/// Cursor in the OS's own units. On Linux the Xlib call aborts without an X server, so it is skipped there.
+fn cursor() -> Option<(i32, i32)> {
+    #[cfg(target_os = "linux")]
+    {
+        let set = |k: &str| std::env::var_os(k).is_some_and(|v| !v.is_empty());
+        if set("WAYLAND_DISPLAY") || !set("DISPLAY") {
+            return None;
+        }
+    }
+    match Mouse::get_mouse_position() {
+        Mouse::Position { x, y } => Some((x, y)),
+        Mouse::Error => None,
+    }
+}
+
+/// xcap's Linux `from_point` multiplies its argument by the scale while the cursor is already physical,
+/// so match the point against each monitor's logical rect instead.
+#[cfg(target_os = "linux")]
+fn monitor_at(x: i32, y: i32) -> Option<xcap::Monitor> {
+    xcap::Monitor::all().ok()?.into_iter().find(|m| {
+        let s = scale_of(m);
+        let (px, py) = (x as f32 / s, y as f32 / s);
+        match (m.x(), m.y(), m.width(), m.height()) {
+            (Ok(mx), Ok(my), Ok(w), Ok(h)) => {
+                let (mx, my) = (mx as f32, my as f32);
+                px >= mx && px < mx + w as f32 && py >= my && py < my + h as f32
+            }
+            _ => false,
+        }
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn monitor_at(x: i32, y: i32) -> Option<xcap::Monitor> {
+    xcap::Monitor::from_point(x, y).ok()
+}
+
 // ponytail: captures only the monitor under the cursor; upgrade: stitch `Monitor::all()`.
 fn capture() -> Result<Shot, String> {
-    let monitor = match Mouse::get_mouse_position() {
-        Mouse::Position { x, y } => xcap::Monitor::from_point(x, y).ok(),
-        Mouse::Error => None,
-    };
-    let monitor = match monitor {
+    let monitor = match cursor().and_then(|(x, y)| monitor_at(x, y)) {
         Some(m) => m,
         None => {
             let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
@@ -96,21 +136,17 @@ fn capture() -> Result<Shot, String> {
         }
     };
     let image = monitor.capture_image().map_err(|e| e.to_string())?;
-    let scale = monitor
-        .scale_factor()
-        .ok()
-        .filter(|s| s.is_finite() && *s > 0.0)
-        .unwrap_or(1.0);
+    let scale = scale_of(&monitor);
     let (x, y) = (
         monitor.x().unwrap_or(0) as f32,
         monitor.y().unwrap_or(0) as f32,
     );
     let size = vec2(image.width() as f32 / scale, image.height() as f32 / scale);
-    // xcap reports macOS origins in points already, Windows/Linux origins in physical pixels.
-    let pos = if cfg!(target_os = "macos") {
-        pos2(x, y)
-    } else {
+    // xcap reports macOS and Linux origins in logical points already, Windows origins in physical pixels.
+    let pos = if cfg!(windows) {
         pos2(x / scale, y / scale)
+    } else {
+        pos2(x, y)
     };
     Ok(Shot { image, pos, size })
 }
@@ -234,7 +270,13 @@ struct SnipApp {
     status: String,
     header: String,
     focus_set: bool,
+    /// Result-window size, position and min-size flag, held until fullscreen has really ended.
+    pending: Option<(Vec2, Pos2, bool)>,
+    pending_frames: u32,
 }
+
+/// Frames to wait for the window manager to leave fullscreen before resizing anyway.
+const FULLSCREEN_WAIT_FRAMES: u32 = 10;
 
 impl SnipApp {
     fn new(
@@ -269,6 +311,8 @@ impl SnipApp {
             status: String::new(),
             header,
             focus_set: false,
+            pending: None,
+            pending_frames: 0,
         }
     }
 
@@ -371,19 +415,18 @@ impl SnipApp {
             Mode::Translate => vec2(440.0, 220.0),
         };
         let pos = result_position(sel.translate(offset), size, outer);
+        // Leaving fullscreen is asynchronous, so the geometry waits (see `apply_pending`).
         // macOS never entered native fullscreen, so there is nothing to leave.
-        if !cfg!(target_os = "macos") {
-            ctx.send_viewport_cmd(ViewportCommand::Fullscreen(false));
-        }
+        let min = self.mode == Mode::Translate;
         ctx.send_viewport_cmd(ViewportCommand::Decorations(true));
-        ctx.send_viewport_cmd(ViewportCommand::Resizable(true));
-        ctx.send_viewport_cmd(ViewportCommand::Title("Snipslate".to_owned()));
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
-        if self.mode == Mode::Translate {
-            ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(vec2(260.0, 150.0)));
+        if cfg!(target_os = "macos") {
+            Self::send_geometry(ctx, size, pos, min);
+        } else {
+            ctx.send_viewport_cmd(ViewportCommand::Fullscreen(false));
+            self.pending = Some((size, pos, min));
+            self.pending_frames = 0;
+            ctx.request_repaint();
         }
-        ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos));
-        ctx.send_viewport_cmd(ViewportCommand::WindowLevel(WindowLevel::AlwaysOnTop));
 
         match self.mode {
             Mode::Copy => self.start_copy(ctx, crop),
@@ -393,6 +436,31 @@ impl SnipApp {
             }
             Mode::Translate => self.start_translate(ctx, crop),
         }
+    }
+
+    fn send_geometry(ctx: &egui::Context, size: Vec2, pos: Pos2, min: bool) {
+        ctx.send_viewport_cmd(ViewportCommand::Resizable(true));
+        ctx.send_viewport_cmd(ViewportCommand::Title("Snipslate".to_owned()));
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
+        if min {
+            ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(vec2(260.0, 150.0)));
+        }
+        ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos));
+        ctx.send_viewport_cmd(ViewportCommand::WindowLevel(WindowLevel::AlwaysOnTop));
+    }
+
+    /// Sends the result-window geometry once fullscreen is off, or after a bounded wait.
+    fn apply_pending(&mut self, ctx: &egui::Context) {
+        let Some((size, pos, min)) = self.pending else {
+            return;
+        };
+        self.pending_frames += 1;
+        let left = ctx.input(|i| i.viewport().fullscreen) == Some(false);
+        if left || self.pending_frames >= FULLSCREEN_WAIT_FRAMES {
+            self.pending = None;
+            Self::send_geometry(ctx, size, pos, min);
+        }
+        ctx.request_repaint();
     }
 
     fn select_ui(&mut self, ctx: &egui::Context, painter: &egui::Painter) {
@@ -579,6 +647,7 @@ impl eframe::App for SnipApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll(&ctx);
+        self.apply_pending(&ctx);
         if matches!(self.phase, Phase::Select) {
             let painter = ui.painter().clone();
             self.select_ui(&ctx, &painter);
