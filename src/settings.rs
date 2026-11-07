@@ -129,9 +129,7 @@ fn key_entry(provider: Provider) -> Result<keyring::v1::Entry, String> {
 fn keyring_message(e: &keyring::v1::Error) -> String {
     use keyring::v1::Error;
     match e {
-        Error::NoStorageAccess { .. }
-        | Error::PlatformFailure { .. }
-        | Error::NoDefaultStore
+        Error::NoStorageAccess { .. } | Error::PlatformFailure { .. } | Error::NoDefaultStore
             if cfg!(target_os = "linux") =>
         {
             "No Secret Service (gnome-keyring or KWallet) is available to store the key."
