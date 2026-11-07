@@ -35,7 +35,7 @@ jobs:
       - name: Rust components
         run: rustup component add rustfmt clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: Quality gate
         shell: pwsh
