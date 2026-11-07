@@ -312,20 +312,25 @@ fn place_overlay(frame: &eframe::Frame, (x, y, w, h): (i32, i32, i32, i32)) {
     };
     let hwnd = HWND(win.hwnd.get() as *mut _);
     // ponytail: 1 px overhang beats the fullscreen-promotion heuristic; it may show on a monitor stacked directly below.
-    // SAFETY: `hwnd` is the live window of `frame`, and SetWindowPos only reads its integer arguments.
-    let placed = unsafe {
-        SetWindowPos(
-            hwnd,
-            Some(HWND_TOPMOST),
-            x,
-            y,
-            w,
-            h + 1,
-            SWP_NOACTIVATE | SWP_NOOWNERZORDER,
-        )
-    };
-    if let Err(e) = placed {
-        eprintln!("snipslate: SetWindowPos failed: {e}");
+    // Twice: a move onto a monitor with another DPI scale sends WM_DPICHANGED during the first call, and
+    // winit answers it by resizing to Windows' suggested rect. The second call lands on the same monitor.
+    for _ in 0..2 {
+        // SAFETY: `hwnd` is the live window of `frame`, and SetWindowPos only reads its integer arguments.
+        let placed = unsafe {
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                x,
+                y,
+                w,
+                h + 1,
+                SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+            )
+        };
+        if let Err(e) = placed {
+            eprintln!("snipslate: SetWindowPos failed: {e}");
+            return;
+        }
     }
 }
 #[cfg(not(windows))]
