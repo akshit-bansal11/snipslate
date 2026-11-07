@@ -87,7 +87,7 @@ The popup doesn't shape text. Arabic, Urdu, Hindi, Bengali and Thai translations
 
 ## Develop
 
-Needs Rust **1.89** or later (`rust-version` in `Cargo.toml`), with `rustfmt` and `clippy`.
+Needs Rust **1.95** or later (`rust-version` in `Cargo.toml`), with `rustfmt` and `clippy`.
 
 | Path | What |
 | --- | --- |
