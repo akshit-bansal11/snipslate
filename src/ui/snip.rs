@@ -510,7 +510,7 @@ impl SnipApp {
                         ui.add(
                             TextEdit::multiline(&mut shown)
                                 .desired_width(f32::INFINITY)
-                                .frame(false),
+                                .frame(egui::Frame::NONE),
                         );
                     });
             }

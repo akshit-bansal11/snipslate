@@ -48,7 +48,7 @@ enum Field {
 
 impl Field {
     fn id(self) -> egui::Id {
-        egui::Id::new(match self {
+        egui::Id::unique(match self {
             Field::BaseUrl => "base_url",
             Field::Model => "model",
             Field::Language => "language",
