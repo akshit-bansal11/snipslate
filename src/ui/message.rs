@@ -1,6 +1,8 @@
-//! The `--message` window: a title, wrapped text and one OK button.
+//! The `--message` window: wrapped text and one OK button.
 
-use eframe::egui;
+use eframe::egui::{self, Align, Frame, Layout, Margin};
+
+use super::theme::{self, space};
 
 struct MessageApp {
     text: String,
@@ -14,19 +16,27 @@ impl eframe::App for MessageApp {
                 || i.key_pressed(egui::Key::Escape)
                 || i.key_pressed(egui::Key::Space)
         });
-        egui::CentralPanel::default().show(ui, |ui| {
+        let p = theme::palette(ui.ctx());
+        let frame = Frame::new()
+            .fill(p.bg)
+            .inner_margin(Margin::same(space::LG as i8));
+        egui::CentralPanel::default().frame(frame).show(ui, |ui| {
+            let button_h = ui.spacing().interact_size.y;
+            let text_h = ui.available_height() - button_h - ui.spacing().item_spacing.y;
             egui::ScrollArea::vertical()
-                .max_height(70.0)
+                .max_height(text_h)
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.label(self.text.as_str());
                 });
-            ui.add_space(8.0);
-            let ok = ui.button("OK");
-            if self.focus_ok {
-                ok.request_focus();
-                self.focus_ok = false;
-            }
-            close |= ok.clicked();
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let ok = theme::primary_scope(ui, |ui| ui.button("OK"));
+                if self.focus_ok {
+                    ok.request_focus();
+                    self.focus_ok = false;
+                }
+                close |= ok.clicked();
+            });
         });
         if close {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -37,7 +47,7 @@ impl eframe::App for MessageApp {
 pub fn run(title: &str, text: &str) -> i32 {
     let viewport = egui::ViewportBuilder::default()
         .with_title(title)
-        .with_inner_size([380.0, 150.0])
+        .with_inner_size([400.0, 170.0])
         .with_resizable(false)
         .with_minimize_button(false)
         .with_maximize_button(false)

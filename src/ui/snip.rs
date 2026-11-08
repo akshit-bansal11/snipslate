@@ -6,15 +6,18 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Color32, ColorImage, CursorIcon, FontId, Key, PointerButton, Pos2, Rect, ScrollArea,
-    Stroke, StrokeKind, TextEdit, TextureHandle, TextureOptions, Vec2, ViewportBuilder,
-    ViewportCommand, WindowLevel, pos2, vec2,
+    self, Align, Color32, ColorImage, CornerRadius, CursorIcon, FontId, Frame, Id, Key, Layout,
+    Margin, Painter, PointerButton, Pos2, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind,
+    TextEdit, TextureHandle, TextureOptions, UiBuilder, Vec2, ViewportBuilder, ViewportCommand,
+    WindowLevel, pos2, vec2,
 };
 use image::RgbaImage;
 use mouse_position::mouse_position::Mouse;
 
 use crate::settings::{self, AppSettings};
 use crate::translator::{self, Input, Provider, TranslateJob};
+use crate::ui::icons::{self, Icon};
+use crate::ui::theme::{self, Palette, radius, size, space};
 use crate::{clip, imaging, ocr, ui};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -28,8 +31,17 @@ const GAP: f32 = 8.0;
 const AUTO_CLOSE: Duration = Duration::from_millis(1500);
 const HINT: &str = "Drag to select an area  \u{b7}  Esc to cancel";
 const DRM: &str = "Protected video (Netflix and other DRM players)";
-const ACCENT: Color32 = Color32::from_rgb(0, 120, 215);
-const ERROR: Color32 = Color32::from_rgb(200, 40, 40);
+const HAIRLINE: f32 = 1.0;
+/// Selection outline and handle outline.
+const OUTLINE: f32 = 2.0;
+const HANDLE: f32 = 8.0;
+const HINT_TOP: f32 = 44.0;
+const RESULT_SIZE: Vec2 = vec2(460.0, 280.0);
+const RESULT_MIN: Vec2 = vec2(320.0, 200.0);
+const TOAST_SIZE: Vec2 = vec2(340.0, 84.0);
+const THUMB: Vec2 = vec2(72.0, 48.0);
+const SKELETON: [f32; 3] = [1.0, 0.92, 0.6];
+const TEXT_ID: &str = "snipslate-translation";
 
 /// Maps a selection in window points to a pixel rectangle `(x, y, w, h)` of an image of `size` pixels
 /// that covers `screen` (points). `None` when either side is under 4 px.
@@ -69,6 +81,46 @@ fn uv_rect(sel: Rect, screen: Rect) -> Rect {
         )
     };
     Rect::from_min_max(to_uv(sel.min), to_uv(sel.max))
+}
+
+/// Paints dark pill labels side by side over the screenshot, centred on `x`.
+/// `at` is `(x, top if placed below, bottom if placed above)`; it goes above when it would leave `bounds`.
+fn pill(
+    painter: &Painter,
+    p: &Palette,
+    bounds: Rect,
+    at: (f32, f32, f32),
+    parts: &[(&str, FontId)],
+) {
+    let galleys: Vec<_> = parts
+        .iter()
+        .map(|(text, font)| {
+            painter.layout_no_wrap((*text).to_owned(), font.clone(), p.overlay_text)
+        })
+        .collect();
+    let gaps = space::MD * galleys.len().saturating_sub(1) as f32;
+    let content = vec2(
+        galleys.iter().map(|g| g.size().x).sum::<f32>() + gaps,
+        galleys.iter().map(|g| g.size().y).fold(0.0, f32::max),
+    );
+    let size = content + vec2(space::MD, space::SM) * 2.0;
+    let top = if at.1 + size.y <= bounds.max.y {
+        at.1
+    } else {
+        (at.2 - size.y).max(bounds.min.y)
+    };
+    let rect = Rect::from_min_size(pos2(at.0 - size.x / 2.0, top), size);
+    painter.rect_filled(rect, CornerRadius::same(radius::SURFACE), p.overlay_pill);
+    let mut x = rect.min.x + space::MD;
+    for g in galleys {
+        let w = g.size().x;
+        painter.galley(
+            pos2(x, rect.center().y - g.size().y / 2.0),
+            g,
+            p.overlay_text,
+        );
+        x += w + space::MD;
+    }
 }
 
 struct Shot {
@@ -267,6 +319,21 @@ enum Phase {
     Done(Outcome),
 }
 
+/// Outcome of the last Copy click, shown beside the footer buttons.
+enum Status {
+    Ok(String),
+    Err(String),
+}
+
+/// What a result-window click or shortcut asked for.
+enum Act {
+    Copy,
+    CopyClose,
+    Retry,
+    Settings,
+    Close,
+}
+
 struct FullShot {
     image: RgbaImage,
     tex: TextureHandle,
@@ -286,7 +353,8 @@ struct SnipApp {
     sel: Option<Rect>,
     rx: Option<Receiver<Outcome>>,
     close_at: Option<Instant>,
-    status: String,
+    status: Option<Status>,
+    thumb: Option<TextureHandle>,
     header: String,
     focus_set: bool,
     /// Result-window size, position and min-size flag, held until fullscreen has really ended.
@@ -371,7 +439,8 @@ impl SnipApp {
             sel: None,
             rx: None,
             close_at: None,
-            status: String::new(),
+            status: None,
+            thumb: None,
             header,
             focus_set: false,
             pending: None,
@@ -451,7 +520,13 @@ impl SnipApp {
         let Ok(outcome) = rx.try_recv() else { return };
         self.rx = None;
         match &outcome {
-            Outcome::Translated(t) | Outcome::Failed(t) => ui::install_fallback_fonts(ctx, t),
+            Outcome::Translated(t) | Outcome::Failed(t) => {
+                ui::install_fallback_fonts(ctx, t);
+                if self.mode == Mode::Copy {
+                    // The toast is too small for an error message.
+                    ctx.send_viewport_cmd(ViewportCommand::InnerSize(RESULT_SIZE));
+                }
+            }
             Outcome::Copied(_) | Outcome::NoText | Outcome::Black => {
                 self.close_at = Some(Instant::now() + AUTO_CLOSE)
             }
@@ -471,12 +546,20 @@ impl SnipApp {
         };
         let crop = image::imageops::crop_imm(&full.image, x, y, w, h).to_image();
         drop(full);
+        if self.mode == Mode::Translate {
+            let dims = [crop.width() as usize, crop.height() as usize];
+            self.thumb = Some(ctx.load_texture(
+                "thumb",
+                ColorImage::from_rgba_unmultiplied(dims, crop.as_raw()),
+                TextureOptions::LINEAR,
+            ));
+        }
 
         let outer = ctx.input(|i| i.viewport().outer_rect).unwrap_or(screen);
         let offset = outer.min - screen.min;
         let size = match self.mode {
-            Mode::Copy => vec2(300.0, 90.0),
-            Mode::Translate => vec2(440.0, 220.0),
+            Mode::Copy => TOAST_SIZE,
+            Mode::Translate => RESULT_SIZE,
         };
         let pos = result_position(sel.translate(offset), size, outer);
         // Leaving fullscreen is asynchronous, so the geometry waits (see `apply_pending`).
@@ -493,12 +576,18 @@ impl SnipApp {
         }
 
         match self.mode {
-            Mode::Copy => self.start_copy(ctx, crop),
+            Mode::Copy => {
+                self.crop = Some(crop.clone());
+                self.start_copy(ctx, crop);
+            }
             Mode::Translate if imaging::is_mostly_black(&crop) => {
                 self.crop = Some(crop);
                 self.phase = Phase::Blank;
             }
-            Mode::Translate => self.start_translate(ctx, crop),
+            Mode::Translate => {
+                self.crop = Some(crop.clone());
+                self.start_translate(ctx, crop);
+            }
         }
     }
 
@@ -507,7 +596,7 @@ impl SnipApp {
         ctx.send_viewport_cmd(ViewportCommand::Title("Snipslate".to_owned()));
         ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
         if min {
-            ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(vec2(260.0, 150.0)));
+            ctx.send_viewport_cmd(ViewportCommand::MinInnerSize(RESULT_MIN));
         }
         ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos));
         ctx.send_viewport_cmd(ViewportCommand::WindowLevel(WindowLevel::AlwaysOnTop));
@@ -567,19 +656,58 @@ impl SnipApp {
 
         let Some(full) = &self.shot else { return };
         let id = full.tex.id();
+        let image_px = [full.image.width(), full.image.height()];
+        let p = theme::palette(ctx);
         let uv_all = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
         painter.image(id, screen, uv_all, Color32::WHITE);
-        painter.rect_filled(screen, 0.0, Color32::from_black_alpha(110));
+        painter.rect_filled(screen, 0.0, p.scrim);
         if let Some(sel) = self.sel {
             painter.image(id, sel, uv_rect(sel, screen), Color32::WHITE);
-            painter.rect_stroke(sel, 0.0, Stroke::new(2.0, ACCENT), StrokeKind::Outside);
+            painter.rect_stroke(
+                sel,
+                0.0,
+                Stroke::new(OUTLINE, p.accent),
+                StrokeKind::Outside,
+            );
+            for corner in [
+                sel.left_top(),
+                sel.right_top(),
+                sel.left_bottom(),
+                sel.right_bottom(),
+            ] {
+                let handle = Rect::from_center_size(corner, Vec2::splat(HANDLE));
+                painter.rect_filled(handle, 0.0, p.surface);
+                painter.rect_stroke(
+                    handle,
+                    0.0,
+                    Stroke::new(OUTLINE, p.accent),
+                    StrokeKind::Middle,
+                );
+            }
+            if let Some((_, _, w, h)) = selection_to_pixels(sel, screen, image_px) {
+                let text = format!("{w} \u{d7} {h}");
+                let font = FontId::proportional(size::CAPTION);
+                pill(
+                    painter,
+                    &p,
+                    screen,
+                    (sel.center().x, sel.max.y + GAP, sel.min.y - GAP),
+                    &[(text.as_str(), font)],
+                );
+            }
         } else if self.drag_start.is_none() {
-            let galley =
-                painter.layout_no_wrap(HINT.to_owned(), FontId::proportional(16.0), Color32::WHITE);
-            let at = pos2(screen.center().x, screen.min.y + 44.0);
-            let pill = Rect::from_center_size(at, galley.size()).expand2(vec2(14.0, 7.0));
-            painter.rect_filled(pill, 8.0, Color32::from_black_alpha(190));
-            painter.galley(pill.center() - galley.size() / 2.0, galley, Color32::WHITE);
+            let mode = match self.mode {
+                Mode::Translate => "Translate",
+                Mode::Copy => "Copy text",
+            };
+            let body = FontId::proportional(size::BODY);
+            pill(
+                painter,
+                &p,
+                screen,
+                (screen.center().x, screen.min.y + HINT_TOP, 0.0),
+                &[(mode, theme::strong(size::BODY)), (HINT, body)],
+            );
         }
 
         if released {
@@ -591,116 +719,317 @@ impl SnipApp {
     }
 
     fn blank_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.heading("This area looks blank");
-        ui.add_space(6.0);
-        ui.label(format!(
-            "It's almost entirely black. {DRM} always captures as black, so there is nothing to translate. \
-             Tip: use the player's own subtitle settings."
-        ));
-        ui.add_space(6.0);
-        ui.label("If the area really has text on a black background, you can send it anyway.");
-        ui.add_space(10.0);
+        let p = theme::palette(ctx);
+        Frame::new()
+            .inner_margin(Margin::same(space::LG as i8))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    icons::show(ui, Icon::Alert, p.text);
+                    ui.label(RichText::new("This area looks blank").font(theme::strong(size::BODY)));
+                });
+                ui.label(theme::muted(
+                    ctx,
+                    format!(
+                        "It's almost entirely black. {DRM} always captures as black, so there is nothing to translate. \
+                         Tip: use the player's own subtitle settings."
+                    ),
+                ));
+                ui.label(theme::muted(
+                    ctx,
+                    "If the area really has text on a black background, you can send it anyway.",
+                ));
+                ui.horizontal(|ui| {
+                    if ui.button("Send anyway").clicked()
+                        && let Some(crop) = self.crop.clone()
+                    {
+                        self.start_translate(ctx, crop);
+                    }
+                    let cancel = ui.button("Cancel");
+                    if !self.focus_set {
+                        self.focus_set = true;
+                        cancel.request_focus();
+                    }
+                    if cancel.clicked() {
+                        ctx.send_viewport_cmd(ViewportCommand::Close);
+                    }
+                });
+            });
+    }
+
+    /// Copy-mode result: one icon, a title and a caption.
+    fn toast_ui(&self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let p = theme::palette(ctx);
+        let (icon, color, title, note) = match &self.phase {
+            Phase::Done(Outcome::Copied(n)) => {
+                let unit = if *n == 1 { "character" } else { "characters" };
+                (
+                    Some(Icon::CheckCircle),
+                    p.success,
+                    format!("Copied {n} {unit}"),
+                    "Paste it anywhere.".to_owned(),
+                )
+            }
+            Phase::Done(Outcome::NoText) => (
+                Some(Icon::Alert),
+                p.muted,
+                "No text found".to_owned(),
+                "Try a larger area or a clearer font.".to_owned(),
+            ),
+            Phase::Done(Outcome::Black) => (
+                Some(Icon::Alert),
+                p.muted,
+                "That area is black".to_owned(),
+                format!("{DRM} can't be captured."),
+            ),
+            Phase::Busy(label) => (None, p.muted, (*label).to_owned(), String::new()),
+            _ => return,
+        };
+        Frame::new()
+            .inner_margin(Margin::symmetric(space::LG as i8, space::MD as i8))
+            .show(ui, |ui| {
+                ui.horizontal_centered(|ui| {
+                    match icon {
+                        Some(icon) => {
+                            let (rect, _) =
+                                ui.allocate_exact_size(Vec2::splat(space::XL), Sense::hover());
+                            icons::paint(ui.painter(), rect, icon, color);
+                        }
+                        None => {
+                            ui.add(egui::Spinner::new().size(space::XL));
+                        }
+                    }
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = space::XS;
+                        ui.label(RichText::new(title).font(theme::strong(size::BODY)));
+                        if !note.is_empty() {
+                            ui.label(theme::caption(ctx, note));
+                        }
+                    });
+                });
+            });
+    }
+
+    /// Thumbnail plus title and provider line (Translate mode, busy or done).
+    fn header_ui(&self, ui: &mut egui::Ui, p: &Palette) {
         ui.horizontal(|ui| {
-            if ui.button("Send anyway").clicked()
-                && let Some(crop) = self.crop.take()
-            {
-                self.start_translate(ctx, crop);
+            if let Some(tex) = &self.thumb {
+                let src = tex.size_vec2();
+                let fit = (THUMB.x / src.x).min(THUMB.y / src.y);
+                let corner = CornerRadius::same(radius::CONTROL);
+                let shown =
+                    ui.add(egui::Image::from_texture((tex.id(), src * fit)).corner_radius(corner));
+                ui.painter().rect_stroke(
+                    shown.rect,
+                    corner,
+                    Stroke::new(HAIRLINE, p.border),
+                    StrokeKind::Inside,
+                );
             }
-            let cancel = ui.button("Cancel");
-            if !self.focus_set {
-                self.focus_set = true;
-                cancel.request_focus();
-            }
-            if cancel.clicked() {
-                ctx.send_viewport_cmd(ViewportCommand::Close);
-            }
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = space::XS;
+                match &self.phase {
+                    Phase::Busy(label) => {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::Spinner::new().size(size::BODY));
+                            ui.label(RichText::new(*label).font(theme::strong(size::BODY)));
+                        });
+                    }
+                    _ => {
+                        ui.label(
+                            RichText::new(format!("Translated to {}", self.cfg.target_language))
+                                .font(theme::strong(size::BODY)),
+                        );
+                    }
+                }
+                ui.label(theme::caption(
+                    ui.ctx(),
+                    format!("{} \u{b7} AI translation", self.header),
+                ));
+            });
         });
     }
 
-    fn done_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let translate = self.mode == Mode::Translate;
-        let mut copy_text: Option<String> = None;
-        let mut close = false;
-        let Phase::Done(outcome) = &self.phase else {
-            return;
-        };
-
-        if translate {
-            ui.weak(&self.header);
-        }
-        let body_h = (ui.available_height() - 40.0).max(30.0);
-        match outcome {
-            Outcome::Copied(n) => {
-                ui.label(format!("Text copied ({n} characters)"));
+    fn body_ui(&self, ui: &mut egui::Ui, p: &Palette) {
+        match &self.phase {
+            Phase::Busy(_) => {
+                self.header_ui(ui, p);
+                ui.add_space(space::SM);
+                let line = ui.text_style_height(&theme::reading());
+                for share in SKELETON {
+                    let (bar, _) = ui.allocate_exact_size(
+                        vec2(ui.available_width() * share, line),
+                        Sense::hover(),
+                    );
+                    ui.painter()
+                        .rect_filled(bar, CornerRadius::same(radius::CONTROL), p.hover);
+                }
             }
-            Outcome::NoText => {
-                ui.label("No text found");
-            }
-            Outcome::Black => {
-                ui.label(format!(
-                    "Nothing to read: that area is black. {DRM} can't be captured."
-                ));
-            }
-            Outcome::Translated(text) => {
+            Phase::Done(Outcome::Translated(text)) => {
+                self.header_ui(ui, p);
                 ScrollArea::vertical()
-                    .max_height(body_h)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         let mut shown: &str = text;
                         ui.add(
                             TextEdit::multiline(&mut shown)
+                                .id(Id::new(TEXT_ID))
+                                .font(theme::reading())
                                 .desired_width(f32::INFINITY)
-                                .frame(egui::Frame::NONE),
+                                .frame(Frame::NONE),
                         );
                     });
             }
-            Outcome::Failed(msg) => {
-                ScrollArea::vertical()
-                    .max_height(body_h)
-                    .auto_shrink([false, false])
+            Phase::Done(Outcome::Failed(msg)) => {
+                let title = match self.mode {
+                    Mode::Translate => "Translation failed",
+                    Mode::Copy => "Couldn't read text",
+                };
+                Frame::new()
+                    .fill(p.danger_bg)
+                    .stroke(Stroke::new(HAIRLINE, p.danger))
+                    .corner_radius(CornerRadius::same(radius::CARD))
+                    .inner_margin(Margin::same(space::MD as i8))
                     .show(ui, |ui| {
-                        ui.colored_label(ERROR, msg);
+                        ui.horizontal(|ui| {
+                            icons::show(ui, Icon::Alert, p.danger);
+                            ui.label(
+                                RichText::new(title)
+                                    .font(theme::strong(size::BODY))
+                                    .color(p.danger),
+                            );
+                        });
+                        ScrollArea::vertical()
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| {
+                                let mut shown: &str = msg;
+                                ui.add(
+                                    TextEdit::multiline(&mut shown)
+                                        .desired_width(f32::INFINITY)
+                                        .frame(Frame::NONE),
+                                );
+                            });
                     });
             }
+            _ => {}
         }
-        let auto = matches!(
-            outcome,
-            Outcome::Copied(_) | Outcome::NoText | Outcome::Black
-        );
-        if !auto {
-            ui.separator();
-            ui.horizontal(|ui| {
-                if translate {
-                    let text = if let Outcome::Translated(t) = outcome {
-                        Some(t)
-                    } else {
-                        None
-                    };
-                    if ui
-                        .add_enabled(text.is_some(), egui::Button::new("Copy"))
-                        .clicked()
-                    {
-                        copy_text = text.cloned();
+    }
+
+    fn footer_ui(&self, ui: &mut egui::Ui, p: &Palette) -> Option<Act> {
+        let mut act = None;
+        match &self.phase {
+            Phase::Done(Outcome::Translated(_)) => {
+                let tip = if cfg!(target_os = "macos") {
+                    "Copy all (Cmd+C)"
+                } else {
+                    "Copy all (Ctrl+C)"
+                };
+                let copy =
+                    theme::primary_scope(ui, |ui| icons::button(ui, Icon::Copy, "Copy", "Copy"));
+                if copy.on_hover_text(tip).clicked() {
+                    act = Some(Act::Copy);
+                }
+            }
+            Phase::Done(Outcome::Failed(_)) => {
+                if self.crop.is_some()
+                    && theme::primary_scope(ui, |ui| {
+                        icons::button(ui, Icon::Refresh, "Retry", "Retry")
+                    })
+                    .clicked()
+                {
+                    act = Some(Act::Retry);
+                }
+                if icons::button(ui, Icon::Settings, "Open settings", "Open settings").clicked() {
+                    act = Some(Act::Settings);
+                }
+            }
+            _ => {}
+        }
+        let close = icons::button(ui, Icon::Close, "Close", "Close");
+        if close.on_hover_text("Close (Esc)").clicked() {
+            act = Some(Act::Close);
+        }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if let Some(status) = &self.status {
+                let (icon, color, text) = match status {
+                    Status::Ok(t) => (Icon::Check, p.success, t),
+                    Status::Err(t) => (Icon::Alert, p.danger, t),
+                };
+                ui.label(RichText::new(text).color(color));
+                icons::show(ui, icon, color);
+            }
+        });
+        act
+    }
+
+    /// Translate-mode window and every Copy-mode failure: body, hairline, footer.
+    fn result_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let p = theme::palette(ctx);
+        let full = ui.max_rect();
+        let split = full.max.y - (ui.spacing().interact_size.y + 2.0 * space::MD);
+        let body = Rect::from_min_max(full.min, pos2(full.max.x, split));
+        let footer = Rect::from_min_max(pos2(full.min.x, split), full.max)
+            .shrink2(vec2(space::LG, space::MD));
+        ui.scope_builder(UiBuilder::new().max_rect(body), |ui| {
+            Frame::new()
+                .inner_margin(Margin::same(space::LG as i8))
+                .show(ui, |ui| self.body_ui(ui, &p));
+        });
+        ui.painter()
+            .hline(full.x_range(), split, Stroke::new(HAIRLINE, p.border));
+        let mut act = None;
+        let footer_builder = UiBuilder::new()
+            .max_rect(footer)
+            .layout(Layout::left_to_right(Align::Center));
+        ui.scope_builder(footer_builder, |ui| act = self.footer_ui(ui, &p));
+
+        if matches!(self.phase, Phase::Done(Outcome::Translated(_))) {
+            let (enter, copy) = ctx.input(|i| {
+                (
+                    i.key_pressed(Key::Enter),
+                    i.events.iter().any(|e| matches!(e, egui::Event::Copy)),
+                )
+            });
+            let any_focus = ctx.memory(|m| m.focused().is_some());
+            let text_focus = ctx.memory(|m| m.has_focus(Id::new(TEXT_ID)));
+            if enter && !any_focus {
+                act = Some(Act::CopyClose);
+            } else if copy && !text_focus {
+                act = Some(Act::Copy);
+            }
+        }
+        if let Some(act) = act {
+            self.apply(ctx, act);
+        }
+    }
+
+    fn apply(&mut self, ctx: &egui::Context, act: Act) {
+        match act {
+            Act::Copy | Act::CopyClose => {
+                let Phase::Done(Outcome::Translated(text)) = &self.phase else {
+                    return;
+                };
+                match clip::set_text(text) {
+                    Ok(()) if matches!(act, Act::CopyClose) => {
+                        ctx.send_viewport_cmd(ViewportCommand::Close);
+                    }
+                    Ok(()) => self.status = Some(Status::Ok("Copied".to_owned())),
+                    Err(e) => self.status = Some(Status::Err(e)),
+                }
+            }
+            Act::Retry => {
+                if let Some(crop) = self.crop.clone() {
+                    self.status = None;
+                    match self.mode {
+                        Mode::Translate => self.start_translate(ctx, crop),
+                        Mode::Copy => self.start_copy(ctx, crop),
                     }
                 }
-                if ui.button("Close").clicked() {
-                    close = true;
-                }
-                if translate && matches!(outcome, Outcome::Failed(_)) {
-                    ui.colored_label(ERROR, "Translation failed");
-                } else {
-                    ui.weak(&self.status);
-                }
-            });
-        }
-        if let Some(text) = copy_text {
-            self.status = match clip::set_text(&text) {
-                Ok(()) => "Copied to the clipboard".to_owned(),
-                Err(e) => e,
-            };
-        }
-        if close {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
+            }
+            Act::Settings => match crate::spawn_self(&["--settings"]) {
+                Ok(_) => ctx.send_viewport_cmd(ViewportCommand::Close),
+                Err(e) => self.status = Some(Status::Err(e.to_string())),
+            },
+            Act::Close => ctx.send_viewport_cmd(ViewportCommand::Close),
         }
     }
 }
@@ -739,14 +1068,24 @@ impl eframe::App for SnipApp {
                 ctx.request_repaint_after(at - now);
             }
         }
-        egui::CentralPanel::default().show(ui, |ui| match &self.phase {
-            Phase::Blank => self.blank_ui(ui, &ctx),
-            Phase::Busy(label) => {
-                ui.label(*label);
-            }
-            Phase::Done(_) => self.done_ui(ui, &ctx),
-            Phase::Select => {}
-        });
+        let p = theme::palette(&ctx);
+        let blank = matches!(self.phase, Phase::Blank);
+        let result = matches!(
+            (&self.phase, self.mode),
+            (Phase::Busy(_), Mode::Translate)
+                | (Phase::Done(Outcome::Translated(_) | Outcome::Failed(_)), _)
+        );
+        egui::CentralPanel::default()
+            .frame(Frame::new().fill(p.bg))
+            .show(ui, |ui| {
+                if blank {
+                    self.blank_ui(ui, &ctx);
+                } else if result {
+                    self.result_ui(ui, &ctx);
+                } else {
+                    self.toast_ui(ui, &ctx);
+                }
+            });
     }
 
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {

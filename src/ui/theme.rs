@@ -33,6 +33,7 @@ mod raw {
     pub const SLATE_900: Color32 = Color32::from_rgb(0x0F, 0x17, 0x2A);
     pub const SLATE_950: Color32 = Color32::from_rgb(0x0B, 0x11, 0x20);
     pub const WHITE: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+    pub const OVERLAY_PILL: Color32 = Color32::from_black_alpha(210);
     pub const BLUE_100: Color32 = Color32::from_rgb(0xDB, 0xEA, 0xFE);
     pub const BLUE_300: Color32 = Color32::from_rgb(0x93, 0xC5, 0xFD);
     pub const BLUE_400: Color32 = Color32::from_rgb(0x60, 0xA5, 0xFA);
@@ -81,6 +82,9 @@ pub struct Palette {
     pub danger_bg: Color32,
     /// Dimming painted over the frozen screenshot.
     pub scrim: Color32,
+    /// Pills painted over the screenshot; the same in both themes because the screenshot is.
+    pub overlay_pill: Color32,
+    pub overlay_text: Color32,
 }
 
 impl Palette {
@@ -110,6 +114,8 @@ impl Palette {
                 danger: RED_700,
                 danger_bg: RED_TINT_LIGHT,
                 scrim: Color32::from_black_alpha(115),
+                overlay_pill: OVERLAY_PILL,
+                overlay_text: WHITE,
             },
             Theme::Dark => Palette {
                 bg: SLATE_900,
@@ -132,6 +138,8 @@ impl Palette {
                 danger: RED_400,
                 danger_bg: RED_TINT_DARK,
                 scrim: Color32::from_black_alpha(115),
+                overlay_pill: OVERLAY_PILL,
+                overlay_text: WHITE,
             },
         }
     }
