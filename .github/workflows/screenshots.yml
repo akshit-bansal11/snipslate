@@ -1,0 +1,93 @@
+name: Screenshots
+
+# Renders the real windows on CI runners so a design change can be reviewed without
+# running the app locally. Linux (Xvfb, Mesa llvmpipe) shows the dark theme, which is
+# egui's fallback when no OS theme is reported; the macOS runner shows the light theme.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install build and display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libclang-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libxcb1-dev libxcb-shm0-dev libxcb-randr0-dev libxcb-xfixes0-dev libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev libxi-dev libdbus-1-dev libpipewire-0.3-dev libgbm-dev libwayland-dev libegl-dev libgl1-mesa-dev \
+            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Capture windows
+        run: |
+          mkdir shots
+          cat > capture.sh <<'EOF'
+          set -u
+          exe=./target/release/snipslate
+          # Fills the screen with something to snip.
+          xsetroot -solid '#3a6ea5' 2>/dev/null || true
+
+          $exe --settings & pid=$!
+          sleep 6; import -window root shots/linux-settings.png; kill $pid; wait $pid 2>/dev/null
+
+          $exe --message "Hotkey unavailable" "Ctrl+Alt+T is already used by another app. Pick another in Settings; the tray menu still works." & pid=$!
+          sleep 5; import -window root shots/linux-message.png; kill $pid; wait $pid 2>/dev/null
+
+          # Overlay mid-drag, then the copy-mode result (no Tesseract here, so it shows the error state).
+          $exe --copy & pid=$!
+          sleep 5; import -window root shots/linux-overlay-idle.png
+          xdotool mousemove 300 250 mousedown 1 mousemove 500 330 mousemove 760 420
+          sleep 1; import -window root shots/linux-overlay-drag.png
+          xdotool mouseup 1
+          sleep 3; import -window root shots/linux-copy-result.png
+          kill $pid 2>/dev/null; wait $pid 2>/dev/null
+          exit 0
+          EOF
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1280x800x24" bash capture.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-linux
+          path: shots/*.png
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Capture windows
+        run: |
+          set -u
+          mkdir shots
+          exe=./target/release/snipslate
+          $exe --settings & pid=$!
+          sleep 6; screencapture -x shots/macos-settings.png; kill $pid || true
+
+          $exe --message "Snipslate" "Snipslate is already running. Look for its icon in the menu bar." & pid=$!
+          sleep 5; screencapture -x shots/macos-message.png; kill $pid || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-macos
+          path: shots/*.png
+          if-no-files-found: error
