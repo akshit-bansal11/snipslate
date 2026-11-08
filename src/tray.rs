@@ -31,10 +31,14 @@ const SIZE: u32 = 32;
 
 /// Spawns `args` as a child; when it ends, reports a failure and asks the tray to reload settings.
 fn launch(args: &[&str], waker: &Waker) {
+    // Settings pauses the global hotkeys while its child runs; every Pause is matched by a Resume.
+    let settings = args == SETTINGS;
+    if settings {
+        waker(Wake::Pause);
+    }
     match spawn_self(args) {
         Ok(mut child) => {
             let waker = Arc::clone(waker);
-            let resume = args == SETTINGS;
             thread::spawn(move || {
                 match child.wait() {
                     Ok(status) if !status.success() => {
@@ -49,10 +53,15 @@ fn launch(args: &[&str], waker: &Waker) {
                     Ok(_) => {}
                     Err(e) => eprintln!("snipslate: waiting for a child failed: {e}"),
                 }
-                waker(if resume { Wake::Resume } else { Wake::Reload });
+                waker(if settings { Wake::Resume } else { Wake::Reload });
             });
         }
-        Err(e) => show_message("Snipslate", &format!("Could not start: {e}")),
+        Err(e) => {
+            if settings {
+                waker(Wake::Resume);
+            }
+            show_message("Snipslate", &format!("Could not start: {e}"));
+        }
     }
 }
 
@@ -72,8 +81,9 @@ struct Tray {
     /// The hotkey strings currently applied (translate, copy).
     keys: (String, String),
     ids: Ids,
-    /// True while Settings is open; hotkeys stay unregistered.
-    paused: bool,
+    /// Settings children running now; hotkeys stay unregistered while it is above 0. A count, not a
+    /// flag: a second Settings click spawns a child that exits at once on the settings lock.
+    paused: u32,
 }
 
 impl Tray {
@@ -115,7 +125,6 @@ impl Tray {
             } else if *id == settings_id {
                 // ponytail: Settings opened by a snip child (missing-key hint path) does not pause the
                 // hotkeys; recording there can trigger a snip. Route that launch through the tray to fix.
-                menu_waker(Wake::Pause);
                 launch(SETTINGS, &menu_waker);
             } else if *id == quit_id {
                 menu_waker(Wake::Quit);
@@ -166,7 +175,7 @@ impl Tray {
             registered: [None, None],
             keys: (String::new(), String::new()),
             ids,
-            paused: false,
+            paused: 0,
         };
         this.apply(&AppSettings::load());
         Ok(this)
@@ -174,7 +183,7 @@ impl Tray {
 
     /// Re-reads settings; touches hotkeys and menu text only when a hotkey string changed.
     fn reload(&mut self) {
-        if self.paused {
+        if self.paused > 0 {
             return;
         }
         let settings = AppSettings::load();
@@ -184,7 +193,10 @@ impl Tray {
     }
 
     fn pause(&mut self) {
-        self.paused = true;
+        self.paused += 1;
+        if self.paused > 1 {
+            return;
+        }
         if let Some(manager) = &self.manager {
             for hk in std::mem::take(&mut self.registered).into_iter().flatten() {
                 if let Err(e) = manager.unregister(hk) {
@@ -195,9 +207,13 @@ impl Tray {
         *self.ids.lock().unwrap_or_else(PoisonError::into_inner) = (None, None);
     }
 
-    /// Re-applies the saved hotkeys even when the strings are unchanged (`pause` dropped them).
+    /// When the last Settings child ends, re-applies the saved hotkeys even when the strings are
+    /// unchanged (`pause` dropped them).
     fn resume(&mut self) {
-        self.paused = false;
+        self.paused = self.paused.saturating_sub(1);
+        if self.paused > 0 {
+            return;
+        }
         self.apply(&AppSettings::load());
     }
 

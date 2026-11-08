@@ -359,6 +359,8 @@ struct SnipApp {
     focus_set: bool,
     /// Result-window size, position and min-size flag, held until fullscreen has really ended.
     pending: Option<(Vec2, Pos2, bool)>,
+    /// Selection and monitor rects (outer-window coordinates), to place a grown window later.
+    anchor: Option<(Rect, Rect)>,
     pending_frames: u32,
     phys: (i32, i32, i32, i32),
 }
@@ -444,6 +446,7 @@ impl SnipApp {
             header,
             focus_set: false,
             pending: None,
+            anchor: None,
             pending_frames: 0,
             phys,
         }
@@ -523,8 +526,7 @@ impl SnipApp {
             Outcome::Translated(t) | Outcome::Failed(t) => {
                 ui::install_fallback_fonts(ctx, t);
                 if self.mode == Mode::Copy {
-                    // The toast is too small for an error message.
-                    ctx.send_viewport_cmd(ViewportCommand::InnerSize(RESULT_SIZE));
+                    self.grow_to_result(ctx);
                 }
             }
             Outcome::Copied(_) | Outcome::NoText | Outcome::Black => {
@@ -562,6 +564,7 @@ impl SnipApp {
             Mode::Translate => RESULT_SIZE,
         };
         let pos = result_position(sel.translate(offset), size, outer);
+        self.anchor = Some((sel.translate(offset), outer));
         // Leaving fullscreen is asynchronous, so the geometry waits (see `apply_pending`).
         // Only Linux enters fullscreen; macOS and Windows use a plain borderless window.
         let min = self.mode == Mode::Translate;
@@ -588,6 +591,21 @@ impl SnipApp {
                 self.crop = Some(crop.clone());
                 self.start_translate(ctx, crop);
             }
+        }
+    }
+
+    /// The copy toast is too small for an error: grow it to the result size, re-placed so it stays
+    /// on the monitor. On Linux the toast geometry may still be pending; replace it instead of
+    /// letting `apply_pending` shrink the window back afterwards.
+    fn grow_to_result(&mut self, ctx: &egui::Context) {
+        let Some((sel, monitor)) = self.anchor else {
+            return;
+        };
+        let pos = result_position(sel, RESULT_SIZE, monitor);
+        if self.pending.is_some() {
+            self.pending = Some((RESULT_SIZE, pos, true));
+        } else {
+            Self::send_geometry(ctx, RESULT_SIZE, pos, true);
         }
     }
 
@@ -1026,7 +1044,19 @@ impl SnipApp {
                 }
             }
             Act::Settings => match crate::spawn_self(&["--settings"]) {
-                Ok(_) => ctx.send_viewport_cmd(ViewportCommand::Close),
+                // Stay alive, hidden, until Settings exits: the tray reloads hotkeys when this
+                // child ends, so closing now would skip applying a shortcut changed there.
+                Ok(mut child) => {
+                    ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+                    let ctx = ctx.clone();
+                    std::thread::spawn(move || {
+                        if let Err(e) = child.wait() {
+                            eprintln!("snipslate: waiting for settings failed: {e}");
+                        }
+                        ctx.send_viewport_cmd(ViewportCommand::Close);
+                        ctx.request_repaint();
+                    });
+                }
                 Err(e) => self.status = Some(Status::Err(e.to_string())),
             },
             Act::Close => ctx.send_viewport_cmd(ViewportCommand::Close),

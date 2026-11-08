@@ -293,12 +293,7 @@ impl SettingsApp {
             self.fail(field);
             return;
         }
-        let typed = self.api_key.trim().to_string();
-        let key = if typed.is_empty() {
-            key_get(self.provider).ok().flatten().unwrap_or_default()
-        } else {
-            typed
-        };
+        let key = self.effective_key();
         if key.is_empty() && self.provider != Provider::Custom {
             self.test = TestState::Done(Err("Paste an API key before testing.".into()));
             return;
@@ -336,17 +331,22 @@ impl SettingsApp {
         }
     }
 
-    /// Starts loading the model list in the background. The typed key wins over the saved one.
-    fn fetch_models(&mut self, ctx: &egui::Context) {
-        self.models_gen += 1;
+    /// The key to use for a request: the typed one, else the saved one (one keychain read), else empty.
+    fn effective_key(&self) -> String {
         let typed = self.api_key.trim();
-        let key = if !typed.is_empty() {
+        if !typed.is_empty() {
             typed.to_string()
         } else if self.key_saved {
             key_get(self.provider).ok().flatten().unwrap_or_default()
         } else {
             String::new()
-        };
+        }
+    }
+
+    /// Starts loading the model list in the background. The typed key wins over the saved one.
+    fn fetch_models(&mut self, ctx: &egui::Context) {
+        self.models_gen += 1;
+        let key = self.effective_key();
         let base = self.base_url.trim().to_string();
         if (key.is_empty() && self.provider != Provider::Custom) || base.is_empty() {
             self.models = Models::Idle;
