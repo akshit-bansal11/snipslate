@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config libclang-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libxcb1-dev libxcb-shm0-dev libxcb-randr0-dev libxcb-xfixes0-dev libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev libxi-dev libdbus-1-dev libpipewire-0.3-dev libgbm-dev libwayland-dev libegl-dev libgl1-mesa-dev \
-            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core openbox x11-xserver-utils
+            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core fonts-dejavu-core openbox x11-xserver-utils tesseract-ocr
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
@@ -39,21 +39,35 @@ jobs:
           # the coloured root gives the overlay something to dim.
           openbox >/dev/null 2>&1 &
           sleep 2
-          xsetroot -solid "#3a6ea5"
+          # A French notice on the desktop gives the snip something real to read.
+          convert -size 1280x800 xc:'#e2e8f0' -fill '#ffffff' -draw 'roundrectangle 140,170 1140,560 18,18' \
+            -font DejaVu-Sans-Bold -fill '#0f172a' -pointsize 34 -annotate +200+260 'Mise à jour disponible' \
+            -font DejaVu-Sans -pointsize 24 -fill '#334155' \
+            -annotate +200+320 "Une nouvelle version de l'application est prête." \
+            -annotate +200+362 "Elle sera installée au prochain redémarrage." \
+            -annotate +200+404 "Enregistrez votre travail avant de continuer." \
+            -fill '#2563eb' -draw 'roundrectangle 200,460 470,516 10,10' \
+            -fill '#ffffff' -pointsize 22 -annotate +238+496 'Redémarrer maintenant' \
+            desktop.png
+          display -window root desktop.png
 
           $exe --settings & pid=$!
-          sleep 6; import -window root shots/linux-settings.png; kill $pid; wait $pid 2>/dev/null
+          sleep 6; import -window root shots/linux-settings.png
+          wid=$(xdotool search --name '^Snipslate settings$' | head -1)
+          [ -n "$wid" ] && import -window "$wid" shots/window-settings.png
+          kill $pid; wait $pid 2>/dev/null
 
           $exe --message "Hotkey unavailable" "Ctrl+Alt+T is already used by another app. Pick another in Settings; the tray menu still works." & pid=$!
           sleep 5; import -window root shots/linux-message.png; kill $pid; wait $pid 2>/dev/null
 
-          # Overlay mid-drag, then the copy-mode result (no Tesseract here, so it shows the error state).
+          # Overlay idle and mid-drag over the notice, then the copy toast (Tesseract reads it).
           $exe --copy & pid=$!
           sleep 5; import -window root shots/linux-overlay-idle.png
-          xdotool mousemove 300 250 mousedown 1 mousemove 500 330 mousemove 760 420
+          xdotool mousemove 180 215 mousedown 1 mousemove 600 330 mousemove 1110 430
           sleep 1; import -window root shots/linux-overlay-drag.png
           xdotool mouseup 1
-          sleep 3; import -window root shots/linux-copy-result.png
+          # The toast closes itself after 1.5 s, so take a quick burst.
+          for i in 1 2 3 4 5 6 7 8; do sleep 0.4; import -window root "shots/linux-copy-$i.png"; done
           kill $pid 2>/dev/null; wait $pid 2>/dev/null
           exit 0
           EOF

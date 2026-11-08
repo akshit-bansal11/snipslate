@@ -3,3 +3,9 @@ out/
 .env
 .env.*
 !.env.example
+site/node_modules/
+site/.next/
+site/next-env.d.ts
+site/*.tsbuildinfo
+.vercel/
+site/.vercel/
