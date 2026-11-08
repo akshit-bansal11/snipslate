@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "check": "biome check --write . && tsc --noEmit",
-    "check:ci": "biome ci . && tsc --noEmit"
+    "check:ci": "biome ci --max-diagnostics=300 . && tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "1.70.0",
