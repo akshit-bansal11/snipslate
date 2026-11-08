@@ -50,6 +50,7 @@ pub fn run(title: &str, text: &str) -> i32 {
         "Snipslate",
         super::native_options(viewport),
         Box::new(move |cc| {
+            super::theme::install(&cc.egui_ctx);
             super::install_fallback_fonts(&cc.egui_ctx, &format!("{title}{}", app.text));
             Ok(Box::new(app))
         }),

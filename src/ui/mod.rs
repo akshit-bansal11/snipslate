@@ -1,8 +1,10 @@
 //! Shared egui plumbing for the child-process windows (settings, message, snip).
 
+pub mod icons;
 pub mod message;
 pub mod settings;
 pub mod snip;
+pub mod theme;
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -10,11 +12,20 @@ use std::sync::Arc;
 
 use eframe::egui;
 
+/// Title-bar and taskbar icon size in pixels.
+const WINDOW_ICON: u32 = 64;
+
 /// Window options shared by every Snipslate window: Glow renderer, nothing persisted,
-/// app id "snipslate", and on macOS no Dock icon (Accessory activation policy).
+/// app id "snipslate", the logo as window icon, and on macOS no Dock icon (Accessory policy).
+/// Each window's creator closure also calls [`theme::install`].
 pub fn native_options(viewport: egui::ViewportBuilder) -> eframe::NativeOptions {
+    let icon = egui::IconData {
+        rgba: crate::brand::logo_rgba(WINDOW_ICON),
+        width: WINDOW_ICON,
+        height: WINDOW_ICON,
+    };
     eframe::NativeOptions {
-        viewport: viewport.with_app_id("snipslate"),
+        viewport: viewport.with_app_id("snipslate").with_icon(icon),
         renderer: eframe::Renderer::Glow,
         persist_window: false,
         #[cfg(target_os = "macos")]
@@ -106,12 +117,13 @@ fn find_font(g: &Group) -> Option<PathBuf> {
 }
 
 /// egui's bundled fonts lack CJK, Arabic, Indic and Thai. For each script present in
-/// `text`, load one system font and append it to the Proportional family. Missing
-/// fonts are skipped silently. Call once per context: it rebuilds the font set.
+/// `text`, load one system font and append it to every proportional family, on top of
+/// [`theme::base_fonts`]. Missing fonts are skipped silently. Call after [`theme::install`]:
+/// it rebuilds the font set.
 /// ponytail: egui does no text shaping or bidi, so Arabic/Urdu/Indic/Thai render with
 /// unjoined glyphs; upgrade path is a shaping-capable renderer. Copy still copies correct text.
 pub fn install_fallback_fonts(ctx: &egui::Context, text: &str) {
-    let mut fonts = egui::FontDefinitions::default();
+    let mut fonts = theme::base_fonts();
     let mut added = false;
     for (i, g) in GROUPS.iter().enumerate() {
         let needed = text.chars().any(|c| {
@@ -129,11 +141,11 @@ pub fn install_fallback_fonts(ctx: &egui::Context, text: &str) {
         fonts
             .font_data
             .insert(name.clone(), Arc::new(egui::FontData::from_owned(bytes)));
-        fonts
-            .families
-            .entry(egui::FontFamily::Proportional)
-            .or_default()
-            .push(name);
+        for (family, list) in fonts.families.iter_mut() {
+            if *family != egui::FontFamily::Monospace {
+                list.push(name.clone());
+            }
+        }
         added = true;
     }
     if added {

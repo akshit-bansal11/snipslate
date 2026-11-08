@@ -22,34 +22,8 @@ enum Wake {
 /// Posts a [`Wake`] to whichever event loop this OS runs.
 type Waker = Arc<dyn Fn(Wake) + Send + Sync>;
 
+/// Tray icon size in pixels; the OS scales it to 16-24 px.
 const SIZE: u32 = 32;
-
-/// 32x32 RGBA: accent `#2563eb` rounded square with white corner brackets.
-fn icon_rgba() -> Vec<u8> {
-    let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            // Distance from the pixel centre to the inner rectangle shrunk by the radius.
-            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-            let (dx, dy) = (fx - fx.clamp(6.0, 26.0), fy - fy.clamp(6.0, 26.0));
-            if dx * dx + dy * dy > 36.0 {
-                rgba.extend_from_slice(&[0, 0, 0, 0]);
-                continue;
-            }
-            // Fold to the top-left corner: brackets are 2 px thick, 7 px long, inset 7 px.
-            let (mx, my) = (x.min(SIZE - 1 - x), y.min(SIZE - 1 - y));
-            let bracket = ((7..14).contains(&mx) && (7..9).contains(&my))
-                || ((7..9).contains(&mx) && (7..14).contains(&my));
-            let (r, g, b) = if bracket {
-                (255, 255, 255)
-            } else {
-                (0x25, 0x63, 0xeb)
-            };
-            rgba.extend_from_slice(&[r, g, b, 255]);
-        }
-    }
-    rgba
-}
 
 /// Spawns `args` as a child; when it ends, reports a failure and asks the tray to reload settings.
 fn launch(args: &[&str], waker: &Waker) {
@@ -110,7 +84,8 @@ impl Tray {
             &quit_item,
         ])
         .map_err(|e| e.to_string())?;
-        let icon = Icon::from_rgba(icon_rgba(), SIZE, SIZE).map_err(|e| e.to_string())?;
+        let icon = Icon::from_rgba(crate::brand::logo_rgba(SIZE), SIZE, SIZE)
+            .map_err(|e| e.to_string())?;
         let tray = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             // macOS convention: a left click opens the menu; elsewhere it translates (below).
@@ -414,17 +389,4 @@ pub fn run() -> i32 {
         }
     };
     event_loop()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn icon_is_32x32_rgba_with_opaque_centre() {
-        let rgba = icon_rgba();
-        assert_eq!(rgba.len(), 32 * 32 * 4);
-        assert_eq!(rgba[(16 * 32 + 16) * 4 + 3], 255);
-        assert_eq!(rgba[3], 0, "corner pixel is transparent");
-    }
 }

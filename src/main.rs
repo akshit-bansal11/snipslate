@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 
+mod brand;
 mod clip;
 mod hotkey;
 mod imaging;

@@ -521,7 +521,10 @@ pub fn run(hint: Option<&str>) -> i32 {
     let result = eframe::run_native(
         "Snipslate settings",
         super::native_options(viewport),
-        Box::new(move |_cc| Ok(Box::new(app))),
+        Box::new(move |cc| {
+            super::theme::install(&cc.egui_ctx);
+            Ok(Box::new(app))
+        }),
     );
     match result {
         Ok(()) => 0,

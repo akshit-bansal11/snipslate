@@ -231,6 +231,7 @@ pub fn run(mode: Mode) -> i32 {
         "Snipslate",
         ui::native_options(builder),
         Box::new(move |cc| {
+            ui::theme::install(&cc.egui_ctx);
             Ok(Box::new(SnipApp::new(
                 &cc.egui_ctx,
                 mode,
