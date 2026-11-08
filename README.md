@@ -4,6 +4,8 @@ Snip any part of your screen and **translate it** with your own AI key, or **cop
 
 Snipslate is a native tray app for **Windows, macOS and Linux**, written in Rust with egui.
 
+Website and documentation: <https://snipslate.akshitbansal.dev>. The site lives in [`site/`](site/) (Next.js, deployed on Vercel).
+
 - **Copy text** (`Ctrl+Alt+C`): drag a box and the text in it is copied to the clipboard. Uses the operating system's text recognition (Windows and macOS built-in, Tesseract on Linux), so it works offline and costs nothing.
 - **Translate** (`Ctrl+Alt+T`): drag a box and the snip goes to the AI provider you chose. The translation appears in a small popup next to the snip with a **Copy** button.
 
