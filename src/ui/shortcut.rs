@@ -28,6 +28,13 @@ pub struct Recorder {
     error: Option<String>,
 }
 
+impl Recorder {
+    /// True while the control is waiting for a key press.
+    pub fn is_recording(&self) -> bool {
+        self.recording
+    }
+}
+
 fn layout(ui: &Ui, text: &str, font: FontId, color: Color32) -> Arc<Galley> {
     ui.painter().layout_no_wrap(text.to_owned(), font, color)
 }
