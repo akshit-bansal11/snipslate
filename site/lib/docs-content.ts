@@ -3,8 +3,7 @@ import type { Block } from "@/lib/docs-types";
 export const intro: Block[] = [
   {
     type: "p",
-    text:
-      "Snipslate is a tray app for Windows, macOS and Linux. Press a shortcut, the screen freezes, and you drag a box over the text you care about. What happens next depends on the shortcut you pressed.",
+    text: "Snipslate is a tray app for Windows, macOS and Linux. Press a shortcut, the screen freezes, and you drag a box over the text you care about. What happens next depends on the shortcut you pressed.",
   },
   {
     type: "ul",
@@ -31,8 +30,7 @@ export const intro: Block[] = [
   {
     type: "callout",
     kind: "note",
-    text:
-      "Copy text needs no key and no account. Press {{Ctrl+Alt+C}} (Linux: {{Ctrl+Alt+Shift+C}}), drag over text, and it is on your clipboard.",
+    text: "Copy text needs no key and no account. Press {{Ctrl+Alt+C}} (Linux: {{Ctrl+Alt+Shift+C}}), drag over text, and it is on your clipboard.",
   },
   {
     type: "h2",
@@ -53,8 +51,7 @@ export const intro: Block[] = [
 export const install: Block[] = [
   {
     type: "p",
-    text:
-      "Each release has one file per system and a SHA256SUMS.txt. Get them from the [latest release](https://github.com/akshit-bansal11/snipslate/releases/latest).",
+    text: "Each release has one file per system and a SHA256SUMS.txt. Get them from the [latest release](https://github.com/akshit-bansal11/snipslate/releases/latest).",
   },
   {
     type: "h2",
@@ -63,8 +60,7 @@ export const install: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Needs Windows 10 (1903) or later, 64-bit. Download the .exe and run it. There is no installer. Snipslate appears in the system tray.",
+    text: "Needs Windows 10 (1903) or later, 64-bit. Download the .exe and run it. There is no installer. Snipslate appears in the system tray.",
   },
   {
     type: "ul",
@@ -81,14 +77,12 @@ export const install: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The .zip holds a universal Snipslate.app for Intel and Apple silicon. Unzip it and move Snipslate.app to Applications.",
+    text: "The .zip holds a universal Snipslate.app for Intel and Apple silicon. Unzip it and move Snipslate.app to Applications.",
   },
   {
     type: "callout",
     kind: "warning",
-    text:
-      "The app is ad-hoc signed, not notarised, so Gatekeeper blocks the first launch. Right-click the app and choose Open, or remove the quarantine flag in Terminal with `xattr -dr com.apple.quarantine Snipslate.app`.",
+    text: "The app is ad-hoc signed, not notarised, so Gatekeeper blocks the first launch. Right-click the app and choose Open, or remove the quarantine flag in Terminal with `xattr -dr com.apple.quarantine Snipslate.app`.",
   },
   {
     type: "ul",
@@ -105,13 +99,11 @@ export const install: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The .tar.gz holds one binary, snipslate, and the license. Extract it and run snipslate. These runtime libraries are needed. The names are for Debian and Ubuntu and are not checked on other distributions.",
+    text: "The .tar.gz holds one binary, snipslate, and the license. Extract it and run snipslate. These runtime libraries are needed. The names are for Debian and Ubuntu and are not checked on other distributions.",
   },
   {
     type: "code",
-    text:
-      "libgtk-3-0  libayatana-appindicator3-1  libxdo3\nlibdbus-1-3  tesseract-ocr",
+    text: "libgtk-3-0  libayatana-appindicator3-1  libxdo3\nlibdbus-1-3  tesseract-ocr",
   },
   {
     type: "ul",
@@ -130,8 +122,7 @@ export const install: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Compare the SHA-256 hash of the file with the line in SHA256SUMS.txt from the same release.",
+    text: "Compare the SHA-256 hash of the file with the line in SHA256SUMS.txt from the same release.",
   },
   {
     type: "table",
@@ -149,22 +140,19 @@ export const install: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Right-click the tray icon for Translate an area, Copy text from an area, Settings and Quit. On Windows a left click translates. On macOS a left click opens the menu. On Linux use the menu or your shortcuts.",
+    text: "Right-click the tray icon for Translate an area, Copy text from an area, Settings and Quit. On Windows a left click translates. On macOS a left click opens the menu. On Linux use the menu or your shortcuts.",
   },
   {
     type: "callout",
     kind: "note",
-    text:
-      "Keys saved by the old Windows-only version (.NET) are not read. Enter them again in Settings.",
+    text: "Keys saved by the old Windows-only version (.NET) are not read. Enter them again in Settings.",
   },
 ];
 
 export const providers: Block[] = [
   {
     type: "p",
-    text:
-      "Translate needs a provider and an API key that you bring. Open Settings from the tray menu to set them up. Copy text does not use a provider.",
+    text: "Translate needs a provider and an API key that you bring. Open Settings from the tray menu to set them up. Copy text does not use a provider.",
   },
   {
     type: "table",
@@ -191,8 +179,7 @@ export const providers: Block[] = [
   },
   {
     type: "p",
-    text:
-      "If you press the Translate shortcut with no key saved, Snipslate opens Settings with a note saying which key is missing.",
+    text: "If you press the Translate shortcut with no key saved, Snipslate opens Settings with a note saying which key is missing.",
   },
   {
     type: "h2",
@@ -201,8 +188,7 @@ export const providers: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Keys go to your operating system's keystore, one entry per provider under the service name Snipslate: Windows Credential Manager, the macOS Keychain, or the Linux Secret Service. They are never written to the settings file. Forget key in Settings removes one.",
+    text: "Keys go to your operating system's keystore, one entry per provider under the service name Snipslate: Windows Credential Manager, the macOS Keychain, or the Linux Secret Service. They are never written to the settings file. Forget key in Settings removes one.",
   },
   {
     type: "h2",
@@ -211,8 +197,7 @@ export const providers: Block[] = [
   },
   {
     type: "p",
-    text:
-      "With a key saved, the model picker loads the list of models your key can use. The reload button fetches it again. The model field also accepts a name you type, so you can use any model your account offers.",
+    text: "With a key saved, the model picker loads the list of models your key can use. The reload button fetches it again. The model field also accepts a name you type, so you can use any model your account offers.",
   },
   {
     type: "ul",
@@ -229,14 +214,12 @@ export const providers: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Any OpenAI-compatible server works, such as Ollama, LM Studio or vLLM. Enter its base URL and a model name. The key is optional for a local server.",
+    text: "Any OpenAI-compatible server works, such as Ollama, LM Studio or vLLM. Enter its base URL and a model name. The key is optional for a local server.",
   },
   {
     type: "callout",
     kind: "note",
-    text:
-      "A base URL must start with https://. Plain http:// is allowed only for localhost, so a key never crosses a network unencrypted. Snipslate also follows no redirects, so a key is never sent to a different address than the one you entered.",
+    text: "A base URL must start with https://. Plain http:// is allowed only for localhost, so a key never crosses a network unencrypted. Snipslate also follows no redirects, so a key is never sent to a different address than the one you entered.",
   },
   {
     type: "h2",
@@ -245,16 +228,14 @@ export const providers: Block[] = [
   },
   {
     type: "p",
-    text:
-      "By default the image of your snip goes to the model, so the model must be able to read images. For a model that cannot, turn on Send text only. Snipslate reads the text on your device first and sends only the words. This uses the same recognition as [Copy text](/docs/copy-text), so on Linux it is English only.",
+    text: "By default the image of your snip goes to the model, so the model must be able to read images. For a model that cannot, turn on Send text only. Snipslate reads the text on your device first and sends only the words. This uses the same recognition as [Copy text](/docs/copy-text), so on Linux it is English only.",
   },
 ];
 
 export const translate: Block[] = [
   {
     type: "p",
-    text:
-      "Translate turns text on your screen into the language you chose, using the provider you set up in [Providers](/docs/providers).",
+    text: "Translate turns text on your screen into the language you chose, using the provider you set up in [Providers](/docs/providers).",
   },
   {
     type: "h2",
@@ -273,8 +254,7 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Pick the target language in Settings under Translate to. The list has 22 languages, from Arabic and Bengali to Vietnamese and Ukrainian.",
+    text: "Pick the target language in Settings under Translate to. The list has 22 languages, from Arabic and Bengali to Vietnamese and Ukrainian.",
   },
   {
     type: "h2",
@@ -283,8 +263,7 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The header reads Translated to followed by the language. Under it, a caption names the provider and model, and says the text is an AI translation. Below that is the translation, which you can select. The footer has Copy and Close.",
+    text: "The header reads Translated to followed by the language. Under it, a caption names the provider and model, and says the text is an AI translation. Below that is the translation, which you can select. The footer has Copy and Close.",
   },
   {
     type: "table",
@@ -297,8 +276,7 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text:
-      "If you have selected part of the text, the usual copy shortcut copies only that selection.",
+    text: "If you have selected part of the text, the usual copy shortcut copies only that selection.",
   },
   {
     type: "h2",
@@ -307,8 +285,7 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text:
-      "A failed request shows the reason in the window. Retry sends the same snip again, and Open settings takes you to your provider and key. See [Troubleshooting](/docs/troubleshooting) for common causes.",
+    text: "A failed request shows the reason in the window. Retry sends the same snip again, and Open settings takes you to your provider and key. See [Troubleshooting](/docs/troubleshooting) for common causes.",
   },
   {
     type: "h2",
@@ -317,13 +294,11 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text:
-      "If the box is almost entirely black, Snipslate stops and says the area looks blank, instead of sending a paid request. Protected video from Netflix and other DRM players always captures as black, because of the copy protection, so there is nothing to translate there. Use the player's own subtitle languages for video.",
+    text: "If the box is almost entirely black, Snipslate stops and says the area looks blank, instead of sending a paid request. Protected video from Netflix and other DRM players always captures as black, because of the copy protection, so there is nothing to translate there. Use the player's own subtitle languages for video.",
   },
   {
     type: "p",
-    text:
-      "If the area really holds text on a black background, choose Send anyway.",
+    text: "If the area really holds text on a black background, choose Send anyway.",
   },
   {
     type: "h2",
@@ -333,16 +308,14 @@ export const translate: Block[] = [
   {
     type: "callout",
     kind: "warning",
-    text:
-      "The result window does not shape text. Arabic, Urdu, Hindi, Bengali and Thai translations appear with letters unjoined and marks misplaced. The Copy button still copies the correct text, so use it for those languages.",
+    text: "The result window does not shape text. Arabic, Urdu, Hindi, Bengali and Thai translations appear with letters unjoined and marks misplaced. The Copy button still copies the correct text, so use it for those languages.",
   },
 ];
 
 export const copyText: Block[] = [
   {
     type: "p",
-    text:
-      "Copy text puts the text from an area of your screen on the clipboard. It uses text recognition built into your system, so it works offline, needs no key and costs nothing. The snip never leaves your computer.",
+    text: "Copy text puts the text from an area of your screen on the clipboard. It uses text recognition built into your system, so it works offline, needs no key and costs nothing. The snip never leaves your computer.",
   },
   {
     type: "h2",
@@ -378,8 +351,7 @@ export const copyText: Block[] = [
   },
   {
     type: "p",
-    text:
-      "On Windows, add a language under Settings, Time and language, Language and region. If none is installed, Snipslate tells you. On Linux, install the tesseract-ocr package.",
+    text: "On Windows, add a language under Settings, Time and language, Language and region. If none is installed, Snipslate tells you. On Linux, install the tesseract-ocr package.",
   },
   {
     type: "h2",
@@ -396,16 +368,14 @@ export const copyText: Block[] = [
   },
   {
     type: "p",
-    text:
-      "A black area usually means protected video, which always captures as black. Snipslate cannot read it, and does not try to get around the protection.",
+    text: "A black area usually means protected video, which always captures as black. Snipslate cannot read it, and does not try to get around the protection.",
   },
 ];
 
 export const shortcuts: Block[] = [
   {
     type: "p",
-    text:
-      "Two shortcuts start a snip from anywhere: one to translate and one to copy text.",
+    text: "Two shortcuts start a snip from anywhere: one to translate and one to copy text.",
   },
   {
     type: "h2",
@@ -457,8 +427,7 @@ export const shortcuts: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Wayland does not let apps register global shortcuts, so Snipslate cannot do it. Bind these commands in your desktop's keyboard shortcut settings instead:",
+    text: "Wayland does not let apps register global shortcuts, so Snipslate cannot do it. Bind these commands in your desktop's keyboard shortcut settings instead:",
   },
   {
     type: "code",
@@ -466,16 +435,14 @@ export const shortcuts: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The same two flags work on every system, which also makes them useful for scripts.",
+    text: "The same two flags work on every system, which also makes them useful for scripts.",
   },
 ];
 
 export const privacy: Block[] = [
   {
     type: "p",
-    text:
-      "Snipslate has no account, no telemetry, no analytics and no update checks. It only talks to the network when you translate or load a model list.",
+    text: "Snipslate has no account, no telemetry, no analytics and no update checks. It only talks to the network when you translate or load a model list.",
   },
   {
     type: "table",
@@ -520,8 +487,7 @@ export const privacy: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Keys are stored in Windows Credential Manager, the macOS Keychain or the Linux Secret Service, under the service name Snipslate. They are not in the settings file or in any other file.",
+    text: "Keys are stored in Windows Credential Manager, the macOS Keychain or the Linux Secret Service, under the service name Snipslate. They are not in the settings file or in any other file.",
   },
   {
     type: "h2",
@@ -530,8 +496,7 @@ export const privacy: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Settings live in a settings.json file with your provider, model, language and shortcuts. The location per system is on the [Install](/docs/install) page.",
+    text: "Settings live in a settings.json file with your provider, model, language and shortcuts. The location per system is on the [Install](/docs/install) page.",
   },
   {
     type: "h2",
@@ -540,8 +505,7 @@ export const privacy: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Once a snip reaches your provider, that provider's own terms and retention apply. Check them before you translate anything sensitive, or use a local server and keep it all on your machine.",
+    text: "Once a snip reaches your provider, that provider's own terms and retention apply. Check them before you translate anything sensitive, or use a local server and keep it all on your machine.",
   },
 ];
 
@@ -553,8 +517,7 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Another app or your system has claimed that combination. Record a different one in Settings, as described in [Shortcuts](/docs/shortcuts). The tray menu works in the meantime. On Wayland, shortcuts must be bound in your desktop settings.",
+    text: "Another app or your system has claimed that combination. Record a different one in Settings, as described in [Shortcuts](/docs/shortcuts). The tray menu works in the meantime. On Wayland, shortcuts must be bound in your desktop settings.",
   },
   {
     type: "h2",
@@ -563,13 +526,11 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Protected video from Netflix and other DRM players captures as black. This is the copy protection working. Use the player's subtitle languages instead.",
+    text: "Protected video from Netflix and other DRM players captures as black. This is the copy protection working. Use the player's subtitle languages instead.",
   },
   {
     type: "p",
-    text:
-      "On macOS, a snip that shows only the wallpaper means Screen Recording permission is missing. Allow Snipslate in System Settings, Privacy and Security, Screen Recording, then restart Snipslate.",
+    text: "On macOS, a snip that shows only the wallpaper means Screen Recording permission is missing. Allow Snipslate in System Settings, Privacy and Security, Screen Recording, then restart Snipslate.",
   },
   {
     type: "h2",
@@ -578,8 +539,7 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Snipslate says no Secret Service is available when it cannot reach a keyring. Install and unlock one, for example gnome-keyring or KWallet, then save the key again.",
+    text: "Snipslate says no Secret Service is available when it cannot reach a keyring. Install and unlock one, for example gnome-keyring or KWallet, then save the key again.",
   },
   {
     type: "h2",
@@ -588,8 +548,7 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The app is ad-hoc signed and not notarised. Right-click Snipslate.app and choose Open, or run this in Terminal:",
+    text: "The app is ad-hoc signed and not notarised. Right-click Snipslate.app and choose Open, or run this in Terminal:",
   },
   {
     type: "code",
@@ -602,8 +561,7 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The exe is not code-signed, so SmartScreen may warn the first time. Compare its SHA-256 hash with SHA256SUMS.txt from the release before you choose to run it.",
+    text: "The exe is not code-signed, so SmartScreen may warn the first time. Compare its SHA-256 hash with SHA256SUMS.txt from the release before you choose to run it.",
   },
   {
     type: "h2",
@@ -612,8 +570,7 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "The result window does not shape text, so letters appear unjoined. The translation itself is correct. Press Copy and paste it into an app that renders the script.",
+    text: "The result window does not shape text, so letters appear unjoined. The translation itself is correct. Press Copy and paste it into an app that renders the script.",
   },
   {
     type: "h2",
@@ -636,7 +593,6 @@ export const troubleshooting: Block[] = [
   },
   {
     type: "p",
-    text:
-      "Try a larger area or a clearer font. On Linux, make sure tesseract-ocr is installed. On Windows, make sure a recognition language is installed.",
+    text: "Try a larger area or a clearer font. On Linux, make sure tesseract-ocr is installed. On Windows, make sure a recognition language is installed.",
   },
 ];
