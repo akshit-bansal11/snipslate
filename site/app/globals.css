@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/* Tier 1: raw palette. Never used directly by components. */
+:root {
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --blue-300: #93c5fd;
+  --blue-400: #60a5fa;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --amber-400: #fbbf24;
+}
+
+/* Tier 2: semantic roles, light. */
+:root {
+  color-scheme: light dark;
+  --bg: var(--slate-100);
+  --surface: #ffffff;
+  --sunken: var(--slate-200);
+  --fg: var(--slate-900);
+  --muted: var(--slate-600);
+  --line: var(--slate-200);
+  --line-strong: var(--slate-300);
+  --accent: var(--blue-600);
+  --accent-hover: var(--blue-700);
+  --on-accent: #ffffff;
+  --accent-text: var(--blue-700);
+  --focus: var(--blue-600);
+  --marker: var(--amber-400);
+  --on-marker: var(--slate-900);
+  --shadow-color: rgb(15 23 42 / 0.08);
+}
+
+/* Tier 2: semantic roles, dark. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--slate-900);
+    --surface: var(--slate-800);
+    --sunken: var(--slate-900);
+    --fg: var(--slate-100);
+    --muted: var(--slate-400);
+    --line: var(--slate-700);
+    --line-strong: var(--slate-700);
+    --accent-text: var(--blue-400);
+    --focus: var(--blue-300);
+    --shadow-color: rgb(0 0 0 / 0.35);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-text: var(--accent-text);
+  --color-marker: var(--marker);
+  --color-on-marker: var(--on-marker);
+
+  --font-sans:
+    var(--font-instrument), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    var(--font-jetbrains), ui-monospace, "Cascadia Code", Menlo, monospace;
+
+  --text-display: clamp(2.25rem, 1.5rem + 3.6vw, 3.75rem);
+  --text-display--line-height: 1.05;
+  --text-title: clamp(1.625rem, 1.3rem + 1.4vw, 2.25rem);
+  --text-title--line-height: 1.15;
+  --text-heading: 1.25rem;
+  --text-heading--line-height: 1.35;
+  --text-lead: clamp(1.0625rem, 1rem + 0.4vw, 1.25rem);
+  --text-lead--line-height: 1.55;
+  --text-body: 1rem;
+  --text-body--line-height: 1.65;
+  --text-small: 0.875rem;
+  --text-caption: 0.8125rem;
+  --text-small--line-height: 1.5;
+  --text-caption--line-height: 1.45;
+
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-surface: 14px;
+
+  --shadow-soft: 0 1px 2px var(--shadow-color);
+  --shadow-lift: 0 8px 24px var(--shadow-color);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family:
+      var(--font-instrument), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-size: 1rem;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 600ms ease-out both;
+  }
+
+  .rise-late {
+    animation: rise 700ms ease-out 120ms both;
+  }
+}
