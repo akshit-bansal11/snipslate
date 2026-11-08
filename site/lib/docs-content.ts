@@ -269,8 +269,14 @@ export const translate: Block[] = [
     type: "table",
     head: ["Key", "What it does"],
     rows: [
-      ["{{Enter}}", "Copies the conversational translation and closes the window."],
-      ["{{Ctrl+C}}", "Copies the conversational translation. On macOS use {{Cmd+C}}."],
+      [
+        "{{Enter}}",
+        "Copies the conversational translation and closes the window.",
+      ],
+      [
+        "{{Ctrl+C}}",
+        "Copies the conversational translation. On macOS use {{Cmd+C}}.",
+      ],
       ["{{Esc}}", "Closes the window."],
     ],
   },

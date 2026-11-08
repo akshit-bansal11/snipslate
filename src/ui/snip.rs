@@ -6,10 +6,10 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align, Color32, ColorImage, CornerRadius, CursorIcon, FontId, Frame, Id, Key, Layout,
-    Margin, Painter, PointerButton, Pos2, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind,
-    TextEdit, TextureHandle, TextureOptions, UiBuilder, Vec2, ViewportBuilder, ViewportCommand,
-    WindowLevel, pos2, vec2,
+    self, Align, Align2, Color32, ColorImage, CornerRadius, CursorIcon, FontId, Frame, Id, Key,
+    Layout, Margin, Painter, PointerButton, Pos2, Rect, RichText, ScrollArea, Sense, Stroke,
+    StrokeKind, TextEdit, TextureHandle, TextureOptions, UiBuilder, Vec2, ViewportBuilder,
+    ViewportCommand, WindowLevel, pos2, vec2,
 };
 use image::RgbaImage;
 use mouse_position::mouse_position::Mouse;
@@ -928,10 +928,10 @@ impl SnipApp {
             TextEdit::multiline(&mut shown)
                 .id(text_id(strict))
                 .font(theme::reading())
-                .horizontal_align(if is_rtl(text) {
-                    Align::RIGHT
+                .align(if is_rtl(text) {
+                    Align2::RIGHT_TOP
                 } else {
-                    Align::LEFT
+                    Align2::LEFT_TOP
                 })
                 .desired_width(f32::INFINITY)
                 .frame(Frame::NONE),
