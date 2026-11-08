@@ -413,7 +413,7 @@ export const shortcuts: Block[] = [
     type: "ul",
     items: [
       "A shortcut needs at least one modifier: Ctrl, Alt or Shift, or Cmd on macOS.",
-      "The key can be a letter, a digit, F1 to F24, Space, Enter, Tab, Backspace, Insert, Delete, Home, End, Page Up, Page Down, an arrow key, Print Screen or Pause.",
+      "The key can be a letter, a digit, F1 to F24, Space, Enter, Tab, Backspace, Insert, Delete, Home, End, Page Up, Page Down, or an arrow key.",
       "The two shortcuts must differ.",
       "The Win or Super key cannot be recorded as a modifier, except Cmd on macOS.",
       "A combination that another app or your system has already claimed cannot be registered. Snipslate tells you, and the tray menu keeps working.",

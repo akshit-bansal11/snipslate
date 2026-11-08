@@ -33,7 +33,6 @@
   --accent-text: var(--blue-700);
   --focus: var(--blue-600);
   --marker: var(--amber-400);
-  --on-marker: var(--slate-900);
   --shadow-color: rgb(15 23 42 / 0.08);
 }
 
@@ -66,7 +65,6 @@
   --color-on-accent: var(--on-accent);
   --color-accent-text: var(--accent-text);
   --color-marker: var(--marker);
-  --color-on-marker: var(--on-marker);
 
   --font-sans:
     var(--font-instrument), ui-sans-serif, system-ui, "Segoe UI", sans-serif;

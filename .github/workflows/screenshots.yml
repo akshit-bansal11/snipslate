@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config libclang-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libxcb1-dev libxcb-shm0-dev libxcb-randr0-dev libxcb-xfixes0-dev libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev libxi-dev libdbus-1-dev libpipewire-0.3-dev libgbm-dev libwayland-dev libegl-dev libgl1-mesa-dev \
-            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core fonts-dejavu-core openbox x11-xserver-utils tesseract-ocr
+            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core fonts-dejavu-core openbox x11-xserver-utils tesseract-ocr gnome-keyring dbus-x11
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
@@ -50,6 +50,11 @@ jobs:
             -fill '#ffffff' -pointsize 22 -annotate +238+496 'Redémarrer maintenant' \
             desktop.png
           display -window root desktop.png
+          # An unlocked keyring gives Settings a Secret Service, as on a real desktop.
+          eval "$(dbus-launch --sh-syntax)"
+          printf "" | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1
+          eval "$(printf "" | gnome-keyring-daemon --start --components=secrets 2>/dev/null)"
+          export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
 
           $exe --settings & pid=$!
           sleep 6; import -window root shots/linux-settings.png

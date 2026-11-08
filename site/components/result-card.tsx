@@ -15,10 +15,8 @@ export function ResultCard() {
           Translated to English
         </p>
         <p className="text-caption text-muted">{caption}</p>
-        <p className="mt-3 text-small leading-7">
-          <mark className="box-decoration-clone bg-marker px-1 text-on-marker">
-            {body}
-          </mark>
+        <p className="mt-3 border-l-2 border-marker pl-3 text-small leading-7 text-fg">
+          {body}
         </p>
         <div className="mt-4 flex items-center gap-3">
           <span className="rounded-control bg-accent px-3 py-1.5 text-small font-medium text-on-accent">

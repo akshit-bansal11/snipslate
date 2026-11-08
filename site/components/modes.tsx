@@ -35,7 +35,7 @@ export function Modes() {
         <h2 className={titleClass} id="modes-title">
           Two ways to snip
         </h2>
-        <div className="mt-10 grid gap-6 lg:grid-cols-2">
+        <div className="mt-10 grid items-start gap-6 lg:grid-cols-2">
           <Mode icon={Languages} {...modes.translate} />
           <Mode icon={ScanText} {...modes.copy}>
             <div className="mt-6">
