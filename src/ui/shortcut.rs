@@ -180,7 +180,7 @@ fn control(
         ui.spacing().interact_size.y.max(cap_h + 2.0 * space::XS),
     );
 
-    let id = ui.id().with(("shortcut", id_salt));
+    let id = ui.scope_id().with(("shortcut", id_salt));
     let (rect, _) = ui.allocate_exact_size(desired, Sense::hover());
     let mut response = ui.interact(rect, id, Sense::click());
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, format!("{id_salt}: {value}")));

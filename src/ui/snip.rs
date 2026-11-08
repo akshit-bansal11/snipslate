@@ -872,7 +872,7 @@ impl SnipApp {
                         let mut shown: &str = text;
                         ui.add(
                             TextEdit::multiline(&mut shown)
-                                .id(Id::new(TEXT_ID))
+                                .id(Id::unique(TEXT_ID))
                                 .font(theme::reading())
                                 .desired_width(f32::INFINITY)
                                 .frame(Frame::NONE),
@@ -990,7 +990,7 @@ impl SnipApp {
                 )
             });
             let any_focus = ctx.memory(|m| m.focused().is_some());
-            let text_focus = ctx.memory(|m| m.has_focus(Id::new(TEXT_ID)));
+            let text_focus = ctx.memory(|m| m.has_focus(Id::unique(TEXT_ID)));
             if enter && !any_focus {
                 act = Some(Act::CopyClose);
             } else if copy && !text_focus {

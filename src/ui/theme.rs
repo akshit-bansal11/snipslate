@@ -208,16 +208,7 @@ pub fn card(p: &Palette) -> Frame {
         .inner_margin(Margin::same(space::LG as i8))
 }
 
-/// Shadow scale: raised (cards on the overlay) and overlay (popups, toasts).
-pub fn shadow_raised() -> Shadow {
-    Shadow {
-        offset: [0, 2],
-        blur: 8,
-        spread: 0,
-        color: Color32::from_black_alpha(40),
-    }
-}
-
+/// Shadow scale: one elevation step, for popups and windows.
 pub fn shadow_overlay() -> Shadow {
     Shadow {
         offset: [0, 6],
