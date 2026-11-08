@@ -327,38 +327,202 @@ pub fn translate(job: &TranslateJob) -> Result<String, String> {
         ));
     }
     let request = build_request(job);
-    let config = ureq::Agent::config_builder()
-        .http_status_as_error(false)
-        // A redirect must never carry the key to another origin.
-        .max_redirects(0)
-        .timeout_global(Some(Duration::from_secs(TIMEOUT_SECS)))
-        .build();
-    let agent = ureq::Agent::new_with_config(config);
-
-    let mut builder = agent.post(&request.url);
+    let mut builder = agent(TIMEOUT_SECS).post(&request.url);
     for (name, value) in &request.headers {
         builder = builder.header(name.as_str(), value.as_str());
     }
-    let result = builder
+    builder
         .send(request.body.to_string())
         .and_then(|mut response| {
             let status = response.status().as_u16();
             let body = response.body_mut().read_to_string()?;
             Ok((status, body))
-        });
-    match result {
-        Ok((status, body)) => parse_response(job.provider, status, &body),
-        Err(ureq::Error::Timeout(_)) => Err(format!(
-            "The provider took longer than {TIMEOUT_SECS} seconds to answer. Try again."
-        )),
-        Err(err) => {
-            let uri = request.url.parse::<Uri>().ok();
-            let host = uri.as_ref().and_then(Uri::host).unwrap_or("the provider");
-            Err(format!(
-                "Couldn't reach {host}. Check your internet connection and the base URL.\n\n{err}"
-            ))
+        })
+        .map_err(|err| transport_error(err, &request.url, TIMEOUT_SECS))
+        .and_then(|(status, body)| parse_response(job.provider, status, &body))
+}
+
+fn agent(timeout_secs: u64) -> ureq::Agent {
+    let config = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        // A redirect must never carry the key to another origin.
+        .max_redirects(0)
+        .timeout_global(Some(Duration::from_secs(timeout_secs)))
+        .build();
+    ureq::Agent::new_with_config(config)
+}
+
+fn transport_error(err: ureq::Error, url: &str, timeout_secs: u64) -> String {
+    if matches!(err, ureq::Error::Timeout(_)) {
+        return format!(
+            "The provider took longer than {timeout_secs} seconds to answer. Try again."
+        );
+    }
+    let uri = url.parse::<Uri>().ok();
+    let host = uri.as_ref().and_then(Uri::host).unwrap_or("the provider");
+    format!("Couldn't reach {host}. Check your internet connection and the base URL.\n\n{err}")
+}
+
+pub const LIST_TIMEOUT_SECS: u64 = 20;
+const MAX_MODEL_PAGES: usize = 10;
+const UNREADABLE_MODELS: &str = "The provider sent a model list Snipslate couldn't read.";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelInfo {
+    pub id: String,
+    /// Display name, or the id when the provider has none.
+    pub label: String,
+    /// Known image support; `None` when the provider doesn't say.
+    pub vision: Option<bool>,
+}
+
+/// GET request for one page of the model list. `after_id` is Anthropic's cursor.
+fn list_request(
+    provider: Provider,
+    base_url: &str,
+    api_key: &str,
+    after_id: Option<&str>,
+) -> HttpRequest {
+    let base = base_url.trim_end_matches('/');
+    let mut headers = Vec::new();
+    let url = if provider == Provider::Anthropic {
+        headers.push(("x-api-key".to_string(), api_key.to_string()));
+        headers.push((
+            "anthropic-version".to_string(),
+            ANTHROPIC_VERSION.to_string(),
+        ));
+        match after_id {
+            Some(id) => format!("{base}/models?limit=1000&after_id={id}"),
+            None => format!("{base}/models?limit=1000"),
+        }
+    } else {
+        if !api_key.is_empty() {
+            headers.push(("Authorization".to_string(), format!("Bearer {api_key}")));
+        }
+        format!("{base}/models")
+    };
+    HttpRequest {
+        url,
+        headers,
+        body: Value::Null,
+    }
+}
+
+// ponytail: substring heuristic on OpenAI ids; /models has no capability field, so a new
+// non-chat family slips through (or a chat model with "audio"/"image" in its name is hidden).
+// Upgrade: an allowlist of chat families if it gets noisy.
+fn is_chat_model(id: &str) -> bool {
+    const NOT_CHAT: [&str; 12] = [
+        "embedding",
+        "tts",
+        "whisper",
+        "dall-e",
+        "moderation",
+        "transcribe",
+        "realtime",
+        "audio",
+        "image",
+        "search",
+        "babbage",
+        "davinci",
+    ];
+    !NOT_CHAT.iter().any(|s| id.contains(s))
+}
+
+/// Returns the page's models and, for Anthropic with more pages, the next `after_id`.
+fn parse_models(
+    provider: Provider,
+    status: u16,
+    body: &str,
+) -> Result<(Vec<ModelInfo>, Option<String>), String> {
+    let ok = (200..300).contains(&status);
+    let root = match serde_json::from_str::<Value>(body) {
+        Ok(v) => v,
+        Err(_) if ok => return Err(UNREADABLE_MODELS.to_string()),
+        Err(_) => Value::Null,
+    };
+    if !ok {
+        return Err(describe_error(status, error_message(&root).as_deref()));
+    }
+    let Some(items) = root["data"].as_array() else {
+        return Err(UNREADABLE_MODELS.to_string());
+    };
+    let mut models: Vec<ModelInfo> = items
+        .iter()
+        .filter_map(|m| {
+            let id = m["id"].as_str().filter(|id| !id.is_empty())?;
+            let name = m["name"].as_str();
+            let display = m["display_name"].as_str();
+            let label = match provider {
+                Provider::Anthropic => display,
+                Provider::OpenRouter => name,
+                _ => None,
+            };
+            let vision = (provider == Provider::OpenRouter)
+                .then(|| m["architecture"]["input_modalities"].as_array())
+                .flatten()
+                .map(|mods| mods.iter().any(|x| x.as_str() == Some("image")));
+            Some(ModelInfo {
+                id: id.to_string(),
+                label: label.filter(|l| !l.is_empty()).unwrap_or(id).to_string(),
+                vision,
+            })
+        })
+        .collect();
+    let mut next = None;
+    match provider {
+        Provider::Anthropic => {
+            if root["has_more"].as_bool() == Some(true) {
+                next = root["last_id"].as_str().map(str::to_string);
+            }
+        }
+        _ => {
+            if provider == Provider::OpenAI {
+                models.retain(|m| is_chat_model(&m.id));
+            }
+            models.sort_by(|a, b| a.id.cmp(&b.id));
+            models.dedup_by(|a, b| a.id == b.id);
         }
     }
+    Ok((models, next))
+}
+
+/// Models this key can use. Blocking; call from a worker thread.
+pub fn list_models(
+    provider: Provider,
+    base_url: &str,
+    api_key: &str,
+) -> Result<Vec<ModelInfo>, String> {
+    if !is_allowed_base_url(base_url) {
+        return Err(format!(
+            "The base URL \"{base_url}\" isn't allowed. It must start with https:// (http:// only for localhost)."
+        ));
+    }
+    let agent = agent(LIST_TIMEOUT_SECS);
+    let mut all = Vec::new();
+    let mut after: Option<String> = None;
+    for _ in 0..MAX_MODEL_PAGES {
+        let request = list_request(provider, base_url, api_key, after.as_deref());
+        let mut builder = agent.get(&request.url);
+        for (name, value) in &request.headers {
+            builder = builder.header(name.as_str(), value.as_str());
+        }
+        let (status, body) = builder
+            .call()
+            .and_then(|mut response| {
+                let status = response.status().as_u16();
+                let body = response.body_mut().read_to_string()?;
+                Ok((status, body))
+            })
+            .map_err(|err| transport_error(err, &request.url, LIST_TIMEOUT_SECS))?;
+        let (mut page, next) = parse_models(provider, status, &body)?;
+        all.append(&mut page);
+        match next {
+            Some(cursor) => after = Some(cursor),
+            None => break,
+        }
+    }
+    Ok(all)
 }
 
 #[cfg(test)]
@@ -585,6 +749,119 @@ mod tests {
             .expect("content array");
         assert_eq!(content.len(), 1);
         assert_eq!(content[0]["type"], "text");
+    }
+
+    fn ids(models: &[ModelInfo]) -> Vec<&str> {
+        models.iter().map(|m| m.id.as_str()).collect()
+    }
+
+    #[test]
+    fn anthropic_models_page_follows_cursor() {
+        let more = r#"{"data":[{"id":"claude-opus-5-5","display_name":"Claude Opus 5.5"},{"id":"claude-sonnet-5-5","display_name":"Claude Sonnet 5.5"}],"has_more":true,"last_id":"claude-sonnet-5-5"}"#;
+        let (models, next) = parse_models(Provider::Anthropic, 200, more).expect("page");
+        assert_eq!(ids(&models), ["claude-opus-5-5", "claude-sonnet-5-5"]);
+        assert_eq!(models[0].label, "Claude Opus 5.5");
+        assert_eq!(models[0].vision, None);
+        assert_eq!(next.as_deref(), Some("claude-sonnet-5-5"));
+
+        let last = r#"{"data":[{"id":"claude-haiku-4-5","display_name":"Claude Haiku 4.5"}],"has_more":false,"last_id":"claude-haiku-4-5"}"#;
+        let (_, next) = parse_models(Provider::Anthropic, 200, last).expect("page");
+        assert_eq!(next, None);
+    }
+
+    #[test]
+    fn anthropic_list_url_has_limit_and_cursor() {
+        let first = list_request(
+            Provider::Anthropic,
+            "https://api.anthropic.com/v1/",
+            "secret",
+            None,
+        );
+        assert_eq!(first.url, "https://api.anthropic.com/v1/models?limit=1000");
+        assert_eq!(header(&first, "x-api-key"), Some("secret"));
+        assert_eq!(header(&first, "anthropic-version"), Some(ANTHROPIC_VERSION));
+        let next = list_request(
+            Provider::Anthropic,
+            "https://api.anthropic.com/v1",
+            "secret",
+            Some("m1"),
+        );
+        assert_eq!(
+            next.url,
+            "https://api.anthropic.com/v1/models?limit=1000&after_id=m1"
+        );
+        assert!(!next.url.contains("secret"));
+    }
+
+    #[test]
+    fn openai_list_drops_non_chat_models_and_sorts() {
+        let body = r#"{"data":[{"id":"gpt-5-mini"},{"id":"text-embedding-3-small"},{"id":"tts-1"},{"id":"whisper-1"},{"id":"gpt-4o"},{"id":"gpt-4o"}]}"#;
+        let (models, next) = parse_models(Provider::OpenAI, 200, body).expect("list");
+        assert_eq!(ids(&models), ["gpt-4o", "gpt-5-mini"]);
+        assert_eq!(models[0].label, "gpt-4o");
+        assert_eq!(next, None);
+    }
+
+    #[test]
+    fn custom_list_keeps_everything() {
+        let body = r#"{"data":[{"id":"whisper-local"},{"id":"llama3.2"}]}"#;
+        let (models, _) = parse_models(Provider::Custom, 200, body).expect("list");
+        assert_eq!(ids(&models), ["llama3.2", "whisper-local"]);
+    }
+
+    #[test]
+    fn openrouter_list_reads_name_and_vision() {
+        let body = r#"{"data":[
+            {"id":"b/text","name":"Text Only","architecture":{"input_modalities":["text"]}},
+            {"id":"a/vis","name":"Seer","architecture":{"input_modalities":["text","image"]}},
+            {"id":"c/none"}]}"#;
+        let (models, _) = parse_models(Provider::OpenRouter, 200, body).expect("list");
+        assert_eq!(ids(&models), ["a/vis", "b/text", "c/none"]);
+        assert_eq!(models[0].label, "Seer");
+        assert_eq!(models[0].vision, Some(true));
+        assert_eq!(models[1].vision, Some(false));
+        assert_eq!(models[2].label, "c/none");
+        assert_eq!(models[2].vision, None);
+    }
+
+    #[test]
+    fn custom_list_without_key_sends_no_authorization() {
+        let req = list_request(Provider::Custom, "http://localhost:11434/v1/", "", None);
+        assert_eq!(req.url, "http://localhost:11434/v1/models");
+        assert_eq!(header(&req, "authorization"), None);
+        let keyed = list_request(
+            Provider::OpenAI,
+            "https://api.openai.com/v1",
+            "secret",
+            None,
+        );
+        assert_eq!(header(&keyed, "authorization"), Some("Bearer secret"));
+    }
+
+    #[test]
+    fn list_errors_are_described() {
+        let body = r#"{"error":{"message":"bad key"}}"#;
+        let err = parse_models(Provider::OpenAI, 401, body).expect_err("401");
+        assert!(err.contains("API key"));
+        assert!(err.contains("bad key"));
+        assert_eq!(
+            parse_models(Provider::OpenAI, 200, "<html>").expect_err("junk"),
+            UNREADABLE_MODELS
+        );
+        assert_eq!(
+            parse_models(Provider::OpenAI, 200, r#"{"ok":1}"#).expect_err("no data"),
+            UNREADABLE_MODELS
+        );
+        let (empty, _) = parse_models(Provider::OpenAI, 200, r#"{"data":[]}"#).expect("empty");
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn list_refuses_plain_http_without_leaking_the_key() {
+        let err = list_models(Provider::Custom, "http://example.com/v1", "secret")
+            .expect_err("must refuse");
+        assert!(err.contains("https://"));
+        assert!(!err.contains("secret"));
     }
 
     #[test]
