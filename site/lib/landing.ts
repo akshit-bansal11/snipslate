@@ -112,13 +112,15 @@ export const downloads = [
   {
     system: "Windows",
     format: ".exe",
-    requirement: "Windows 10 (1903) or later, 64-bit. Run the file, there is no installer.",
+    requirement:
+      "Windows 10 (1903) or later, 64-bit. Run the file, there is no installer.",
     note: "SmartScreen may warn the first time, because the exe is not code-signed.",
   },
   {
     system: "macOS",
     format: ".zip",
-    requirement: "Universal build for Intel and Apple silicon. Unzip and move Snipslate.app to Applications.",
+    requirement:
+      "Universal build for Intel and Apple silicon. Unzip and move Snipslate.app to Applications.",
     note: "The app is ad-hoc signed, so Gatekeeper needs a right-click, then Open. macOS may ask for Screen Recording permission.",
   },
   {
