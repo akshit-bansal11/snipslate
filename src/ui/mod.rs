@@ -3,6 +3,7 @@
 pub mod icons;
 pub mod message;
 pub mod settings;
+pub mod shortcut;
 pub mod snip;
 pub mod theme;
 

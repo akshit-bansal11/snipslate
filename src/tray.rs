@@ -15,6 +15,10 @@ use crate::{show_message, spawn_self};
 
 /// Messages posted to the loop thread by waiter threads and menu handlers.
 enum Wake {
+    /// Settings opened: release the global hotkeys so the recorder sees the keypresses.
+    Pause,
+    /// Settings closed: register the saved hotkeys again.
+    Resume,
     Reload,
     Quit,
 }
@@ -30,6 +34,7 @@ fn launch(args: &[&str], waker: &Waker) {
     match spawn_self(args) {
         Ok(mut child) => {
             let waker = Arc::clone(waker);
+            let resume = args == SETTINGS;
             thread::spawn(move || {
                 match child.wait() {
                     Ok(status) if !status.success() => {
@@ -44,7 +49,7 @@ fn launch(args: &[&str], waker: &Waker) {
                     Ok(_) => {}
                     Err(e) => eprintln!("snipslate: waiting for a child failed: {e}"),
                 }
-                waker(Wake::Reload);
+                waker(if resume { Wake::Resume } else { Wake::Reload });
             });
         }
         Err(e) => show_message("Snipslate", &format!("Could not start: {e}")),
@@ -67,6 +72,8 @@ struct Tray {
     /// The hotkey strings currently applied (translate, copy).
     keys: (String, String),
     ids: Ids,
+    /// True while Settings is open; hotkeys stay unregistered.
+    paused: bool,
 }
 
 impl Tray {
@@ -106,6 +113,9 @@ impl Tray {
             } else if *id == copy_id {
                 launch(COPY, &menu_waker);
             } else if *id == settings_id {
+                // ponytail: Settings opened by a snip child (missing-key hint path) does not pause the
+                // hotkeys; recording there can trigger a snip. Route that launch through the tray to fix.
+                menu_waker(Wake::Pause);
                 launch(SETTINGS, &menu_waker);
             } else if *id == quit_id {
                 menu_waker(Wake::Quit);
@@ -156,6 +166,7 @@ impl Tray {
             registered: [None, None],
             keys: (String::new(), String::new()),
             ids,
+            paused: false,
         };
         this.apply(&AppSettings::load());
         Ok(this)
@@ -163,10 +174,31 @@ impl Tray {
 
     /// Re-reads settings; touches hotkeys and menu text only when a hotkey string changed.
     fn reload(&mut self) {
+        if self.paused {
+            return;
+        }
         let settings = AppSettings::load();
         if settings.translate_hotkey != self.keys.0 || settings.copy_hotkey != self.keys.1 {
             self.apply(&settings);
         }
+    }
+
+    fn pause(&mut self) {
+        self.paused = true;
+        if let Some(manager) = &self.manager {
+            for hk in std::mem::take(&mut self.registered).into_iter().flatten() {
+                if let Err(e) = manager.unregister(hk) {
+                    eprintln!("snipslate: could not unregister a hotkey: {e}");
+                }
+            }
+        }
+        *self.ids.lock().unwrap_or_else(PoisonError::into_inner) = (None, None);
+    }
+
+    /// Re-applies the saved hotkeys even when the strings are unchanged (`pause` dropped them).
+    fn resume(&mut self) {
+        self.paused = false;
+        self.apply(&AppSettings::load());
     }
 
     fn apply(&mut self, settings: &AppSettings) {
@@ -277,6 +309,16 @@ fn event_loop() -> i32 {
 
         fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Wake) {
             match event {
+                Wake::Pause => {
+                    if let Some(tray) = &mut self.tray {
+                        tray.pause();
+                    }
+                }
+                Wake::Resume => {
+                    if let Some(tray) = &mut self.tray {
+                        tray.resume();
+                    }
+                }
                 Wake::Reload => {
                     if let Some(tray) = &mut self.tray {
                         tray.reload();
@@ -356,6 +398,8 @@ fn event_loop() -> i32 {
     timeout_add_local(Duration::from_millis(500), move || {
         while let Ok(wake) = rx.try_recv() {
             match wake {
+                Wake::Pause => in_loop.borrow_mut().pause(),
+                Wake::Resume => in_loop.borrow_mut().resume(),
                 Wake::Reload => in_loop.borrow_mut().reload(),
                 Wake::Quit => {
                     gtk::main_quit();

@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use eframe::egui;
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 
 /// One key plus its modifiers. `Eq` lets Settings compare two hotkeys for a clash.
@@ -110,9 +111,9 @@ impl Hotkey {
         for name in modifier_names {
             let flag = match name.to_ascii_uppercase().as_str() {
                 "CTRL" | "CONTROL" => Modifiers::CONTROL,
-                "ALT" => Modifiers::ALT,
+                "ALT" | "OPTION" => Modifiers::ALT,
                 "SHIFT" => Modifiers::SHIFT,
-                "WIN" | "WINDOWS" => Modifiers::META,
+                "WIN" | "WINDOWS" | "CMD" | "COMMAND" | "SUPER" | "META" => Modifiers::META,
                 _ => return None,
             };
             if modifiers.contains(flag) {
@@ -128,10 +129,84 @@ impl Hotkey {
         Some(Hotkey { modifiers, code })
     }
 
+    /// Builds a hotkey from a key press seen by egui. egui reports the Win/Super key only on
+    /// macOS (as `mac_cmd`); `command` is ignored because it duplicates `ctrl` elsewhere.
+    pub fn from_egui(key: egui::Key, mods: egui::Modifiers) -> Result<Hotkey, &'static str> {
+        let modifiers = from_egui_modifiers(mods);
+        let Some(code) = KEYS
+            .iter()
+            .find(|(name, _)| *name == key.name())
+            .map(|(_, code)| *code)
+        else {
+            return Err("That key can't be used in a shortcut.");
+        };
+        if modifiers.is_empty() {
+            return Err(if cfg!(target_os = "macos") {
+                "Add Control, Option, Shift or Cmd to the key."
+            } else {
+                "Add Ctrl, Alt or Shift to the key."
+            });
+        }
+        Ok(Hotkey { modifiers, code })
+    }
+
+    /// Keycap labels for the current OS: modifiers first (in OS order), then the key.
+    pub fn labels(&self) -> Vec<&'static str> {
+        let mut out = modifier_labels(self.modifiers);
+        out.extend(
+            KEYS.iter()
+                .find(|(_, code)| *code == self.code)
+                .map(|(name, _)| *name),
+        );
+        out
+    }
+
     /// The `global_hotkey` form, ready to register.
     pub fn to_hot_key(self) -> HotKey {
         HotKey::new(Some(self.modifiers), self.code)
     }
+}
+
+fn from_egui_modifiers(mods: egui::Modifiers) -> Modifiers {
+    let mut modifiers = Modifiers::empty();
+    for (down, flag) in [
+        (mods.ctrl, Modifiers::CONTROL),
+        (mods.alt, Modifiers::ALT),
+        (mods.shift, Modifiers::SHIFT),
+        (mods.mac_cmd, Modifiers::META),
+    ] {
+        if down {
+            modifiers |= flag;
+        }
+    }
+    modifiers
+}
+
+fn modifier_labels(modifiers: Modifiers) -> Vec<&'static str> {
+    let names: [&'static str; 4] = if cfg!(target_os = "macos") {
+        ["Control", "Option", "Shift", "Cmd"]
+    } else if cfg!(windows) {
+        ["Ctrl", "Alt", "Shift", "Win"]
+    } else {
+        ["Ctrl", "Alt", "Shift", "Super"]
+    };
+    let flags = [
+        Modifiers::CONTROL,
+        Modifiers::ALT,
+        Modifiers::SHIFT,
+        Modifiers::META,
+    ];
+    flags
+        .into_iter()
+        .zip(names)
+        .filter(|(flag, _)| modifiers.contains(*flag))
+        .map(|(_, name)| name)
+        .collect()
+}
+
+/// Keycap labels for the modifiers egui reports as held right now.
+pub fn held_labels(mods: egui::Modifiers) -> Vec<&'static str> {
+    modifier_labels(from_egui_modifiers(mods))
 }
 
 impl fmt::Display for Hotkey {
@@ -209,6 +284,84 @@ mod tests {
         for text in cases {
             assert_eq!(Hotkey::parse(text), None, "{text}");
         }
+    }
+
+    fn ctrl() -> egui::Modifiers {
+        egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn from_egui_maps_each_modifier() {
+        let cases = [
+            (ctrl(), Modifiers::CONTROL),
+            (egui::Modifiers::ALT, Modifiers::ALT),
+            (egui::Modifiers::SHIFT, Modifiers::SHIFT),
+            (egui::Modifiers::MAC_CMD, Modifiers::META),
+        ];
+        for (mods, expected) in cases {
+            let hotkey = Hotkey::from_egui(egui::Key::T, mods).expect("valid");
+            assert_eq!(hotkey.modifiers, expected);
+            assert_eq!(hotkey.code, Code::KeyT);
+        }
+    }
+
+    #[test]
+    fn from_egui_keys_and_errors() {
+        let mods = ctrl();
+        assert_eq!(
+            Hotkey::from_egui(egui::Key::Num5, mods).map(|h| h.to_string()),
+            Ok("Ctrl+5".to_owned())
+        );
+        assert_eq!(
+            Hotkey::from_egui(egui::Key::ArrowUp, mods).map(|h| h.code),
+            Ok(Code::ArrowUp)
+        );
+        assert_eq!(
+            Hotkey::from_egui(egui::Key::F12, mods).map(|h| h.code),
+            Ok(Code::F12)
+        );
+        assert!(
+            Hotkey::from_egui(egui::Key::T, egui::Modifiers::NONE)
+                .is_err_and(|m| m.starts_with("Add "))
+        );
+        assert_eq!(
+            Hotkey::from_egui(egui::Key::Colon, mods),
+            Err("That key can't be used in a shortcut.")
+        );
+    }
+
+    #[test]
+    fn parses_aliases() {
+        let cases = [
+            ("Cmd+T", Modifiers::META),
+            ("Command+T", Modifiers::META),
+            ("Super+T", Modifiers::META),
+            ("Meta+T", Modifiers::META),
+            ("Option+T", Modifiers::ALT),
+        ];
+        for (text, modifiers) in cases {
+            let parsed = Hotkey::parse(text).expect(text);
+            assert_eq!(parsed.modifiers, modifiers, "{text}");
+        }
+        assert_eq!(
+            Hotkey::parse("Super+T").map(|h| h.to_string()),
+            Some("Win+T".to_owned())
+        );
+    }
+
+    #[test]
+    fn labels_list_modifiers_then_key() {
+        let labels = Hotkey::parse("Shift+Ctrl+T").expect("valid").labels();
+        let first = if cfg!(target_os = "macos") {
+            "Control"
+        } else {
+            "Ctrl"
+        };
+        assert_eq!(labels, [first, "Shift", "T"]);
     }
 
     #[test]
