@@ -504,12 +504,21 @@ impl SettingsApp {
                     .min_col_width(LABEL_WIDTH)
                     .show(ui, |ui| {
                         ui.label(theme::muted(&ctx, "Provider"));
-                        ui.horizontal_wrapped(|ui| {
+                        // Short names keep the segmented row on one line; the full name is the tooltip.
+                        ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = space::XS;
                             for choice in Provider::ALL {
                                 let selected = self.provider == choice;
-                                let button = Button::selectable(selected, choice.display_name());
-                                if ui.add(button).clicked() && !selected {
+                                let button = Button::selectable(selected, choice.name());
+                                let response = ui.add(button);
+                                let response = if choice == Provider::Custom {
+                                    response.on_hover_text(
+                                        "Any OpenAI-compatible server, such as Ollama or LM Studio",
+                                    )
+                                } else {
+                                    response
+                                };
+                                if response.clicked() && !selected {
                                     act.chosen = Some(choice);
                                 }
                             }
@@ -566,7 +575,11 @@ impl SettingsApp {
                         });
                         ui.end_row();
 
-                        ui.label(theme::muted(&ctx, "Base URL"));
+                        let custom = self.provider == Provider::Custom;
+                        ui.label(theme::muted(
+                            &ctx,
+                            if custom { "Base URL" } else { "Endpoint" },
+                        ));
                         ui.vertical(|ui| {
                             if self.provider == Provider::Custom {
                                 let edit = TextEdit::singleline(&mut self.base_url)
@@ -578,10 +591,7 @@ impl SettingsApp {
                                 act.refetch |= lost;
                                 field_error(ui, p, problem, Field::BaseUrl);
                             } else {
-                                ui.label(theme::caption(
-                                    &ctx,
-                                    format!("Endpoint: {}", self.provider.default_base_url()),
-                                ));
+                                ui.label(theme::muted(&ctx, self.provider.default_base_url()));
                             }
                         });
                         ui.end_row();

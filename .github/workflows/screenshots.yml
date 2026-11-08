@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config libclang-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev libxcb1-dev libxcb-shm0-dev libxcb-randr0-dev libxcb-xfixes0-dev libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev libxi-dev libdbus-1-dev libpipewire-0.3-dev libgbm-dev libwayland-dev libegl-dev libgl1-mesa-dev \
-            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core
+            xvfb xdotool imagemagick libgl1-mesa-dri fonts-noto-core openbox x11-xserver-utils
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
@@ -35,8 +35,11 @@ jobs:
           cat > capture.sh <<'EOF'
           set -u
           exe=./target/release/snipslate
-          # Fills the screen with something to snip.
-          xsetroot -solid '#3a6ea5' 2>/dev/null || true
+          # A window manager honours fullscreen and placement as a real desktop does;
+          # the coloured root gives the overlay something to dim.
+          openbox >/dev/null 2>&1 &
+          sleep 2
+          xsetroot -solid "#3a6ea5"
 
           $exe --settings & pid=$!
           sleep 6; import -window root shots/linux-settings.png; kill $pid; wait $pid 2>/dev/null
