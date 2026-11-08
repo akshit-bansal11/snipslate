@@ -46,7 +46,7 @@ jobs:
             -annotate +200+320 "Une nouvelle version de l'application est prête." \
             -annotate +200+362 "Elle sera installée au prochain redémarrage." \
             -annotate +200+404 "Enregistrez votre travail avant de continuer." \
-            -fill '#2563eb' -draw 'roundrectangle 200,460 470,516 10,10' \
+            -fill '#2563eb' -draw 'roundrectangle 200,460 540,516 10,10' \
             -fill '#ffffff' -pointsize 22 -annotate +238+496 'Redémarrer maintenant' \
             desktop.png
           display -window root desktop.png
