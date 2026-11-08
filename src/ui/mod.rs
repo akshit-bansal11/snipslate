@@ -64,7 +64,13 @@ const GROUPS: &[Group] = &[
         files: &["malgun.ttf", "AppleSDGothicNeo.ttc"],
     },
     Group {
-        ranges: &[(0x0600, 0x06FF), (0x0750, 0x077F)],
+        ranges: &[
+            (0x0600, 0x06FF),
+            (0x0750, 0x077F),
+            (0x08A0, 0x08FF),
+            (0xFB50, 0xFDFF),
+            (0xFE70, 0xFEFF),
+        ],
         lang: "ar",
         files: &[
             "segoeui.ttf",
@@ -74,14 +80,49 @@ const GROUPS: &[Group] = &[
         ],
     },
     Group {
+        ranges: &[(0x0590, 0x05FF)],
+        lang: "he",
+        files: &["segoeui.ttf", "SFHebrew.ttf", "ArialHB.ttc"],
+    },
+    Group {
         ranges: &[(0x0900, 0x097F)],
         lang: "hi",
-        files: &["Nirmala.ttc", "Devanagari Sangam MN.ttc"],
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Devanagari Sangam MN.ttc"],
     },
     Group {
         ranges: &[(0x0980, 0x09FF)],
         lang: "bn",
-        files: &["Nirmala.ttc", "Bangla Sangam MN.ttc"],
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Bangla Sangam MN.ttc"],
+    },
+    Group {
+        ranges: &[(0x0A80, 0x0AFF)],
+        lang: "gu",
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Gujarati Sangam MN.ttc"],
+    },
+    Group {
+        ranges: &[(0x0A00, 0x0A7F)],
+        lang: "pa",
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Gurmukhi Sangam MN.ttc"],
+    },
+    Group {
+        ranges: &[(0x0B80, 0x0BFF)],
+        lang: "ta",
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Tamil Sangam MN.ttc"],
+    },
+    Group {
+        ranges: &[(0x0C00, 0x0C7F)],
+        lang: "te",
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Telugu Sangam MN.ttc"],
+    },
+    Group {
+        ranges: &[(0x0C80, 0x0CFF)],
+        lang: "kn",
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Kannada Sangam MN.ttc"],
+    },
+    Group {
+        ranges: &[(0x0D00, 0x0D7F)],
+        lang: "ml",
+        files: &["Nirmala.ttc", "Nirmala.ttf", "Malayalam Sangam MN.ttc"],
     },
     Group {
         ranges: &[(0x0E00, 0x0E7F)],
@@ -117,12 +158,13 @@ fn find_font(g: &Group) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// egui's bundled fonts lack CJK, Arabic, Indic and Thai. For each script present in
+/// egui's bundled fonts lack CJK, Hebrew, Arabic, Indic and Thai. For each script present in
 /// `text`, load one system font and append it to every proportional family, on top of
 /// [`theme::base_fonts`]. Missing fonts are skipped silently. Call after [`theme::install`]:
-/// it rebuilds the font set.
-/// ponytail: egui does no text shaping or bidi, so Arabic/Urdu/Indic/Thai render with
-/// unjoined glyphs; upgrade path is a shaping-capable renderer. Copy still copies correct text.
+/// it rebuilds the font set. epaint shapes the text (harfrust), so Arabic joins and Indic
+/// conjuncts render.
+/// ponytail: there is no bidi reordering, so a Latin word inside an RTL line may display out of
+/// order; upgrade path is a bidi pass before layout. Copy still copies the correct text.
 pub fn install_fallback_fonts(ctx: &egui::Context, text: &str) {
     let mut fonts = theme::base_fonts();
     let mut added = false;

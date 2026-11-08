@@ -36,7 +36,7 @@ export const modes = {
     title: "Translate",
     body: "The snip goes to the provider you set up, with your own key. Pick a model that can read images, or turn on Send text only to read the text on your device first and send only the words.",
     points: [
-      "22 target languages",
+      "48 target languages",
       "Anthropic, OpenAI, OpenRouter or a custom server",
       "Result window with Copy, Retry and Open settings",
     ],
@@ -92,7 +92,7 @@ export const settingsNotes = [
   },
   {
     title: "Translate to",
-    body: "Choose from 22 languages. Send text only suits models that cannot read images.",
+    body: "Choose from 48 languages. Send text only suits models that cannot read images.",
   },
   {
     title: "Shortcuts",

@@ -15,7 +15,7 @@ use image::RgbaImage;
 use mouse_position::mouse_position::Mouse;
 
 use crate::settings::{self, AppSettings};
-use crate::translator::{self, Input, Provider, TranslateJob};
+use crate::translator::{self, Input, Provider, TranslateJob, Translation};
 use crate::ui::icons::{self, Icon};
 use crate::ui::theme::{self, Palette, radius, size, space};
 use crate::{clip, imaging, ocr, ui};
@@ -36,12 +36,11 @@ const HAIRLINE: f32 = 1.0;
 const OUTLINE: f32 = 2.0;
 const HANDLE: f32 = 8.0;
 const HINT_TOP: f32 = 44.0;
-const RESULT_SIZE: Vec2 = vec2(460.0, 280.0);
+const RESULT_SIZE: Vec2 = vec2(480.0, 420.0);
 const RESULT_MIN: Vec2 = vec2(320.0, 200.0);
 const TOAST_SIZE: Vec2 = vec2(340.0, 84.0);
 const THUMB: Vec2 = vec2(72.0, 48.0);
 const SKELETON: [f32; 3] = [1.0, 0.92, 0.6];
-const TEXT_ID: &str = "snipslate-translation";
 
 /// Maps a selection in window points to a pixel rectangle `(x, y, w, h)` of an image of `size` pixels
 /// that covers `screen` (points). `None` when either side is under 4 px.
@@ -308,8 +307,43 @@ enum Outcome {
     Copied(usize),
     NoText,
     Black,
-    Translated(String),
+    Translated(Translation),
     Failed(String),
+}
+
+impl Outcome {
+    /// Text whose scripts may need fallback fonts, when the result window shows any.
+    fn script_text(&self) -> Option<String> {
+        match self {
+            Outcome::Translated(t) => Some(format!("{}\n{}", t.strict, t.conversational)),
+            Outcome::Failed(m) => Some(m.clone()),
+            Outcome::Copied(_) | Outcome::NoText | Outcome::Black => None,
+        }
+    }
+}
+
+/// Whether the first letter of `text` is Hebrew or Arabic-script, so the text reads right to left.
+fn is_rtl(text: &str) -> bool {
+    text.chars().find(|c| c.is_alphabetic()).is_some_and(|c| {
+        matches!(
+            c as u32,
+            0x0590..=0x05FF
+                | 0x0600..=0x06FF
+                | 0x0750..=0x077F
+                | 0x08A0..=0x08FF
+                | 0xFB50..=0xFDFF
+                | 0xFE70..=0xFEFF
+        )
+    })
+}
+
+/// Stable id of a translation text field, so Ctrl+C can tell whether one has focus.
+fn text_id(strict: bool) -> Id {
+    Id::unique(if strict {
+        "snipslate-strict"
+    } else {
+        "snipslate-translation"
+    })
 }
 
 enum Phase {
@@ -328,6 +362,7 @@ enum Status {
 /// What a result-window click or shortcut asked for.
 enum Act {
     Copy,
+    CopyStrict,
     CopyClose,
     Retry,
     Settings,
@@ -522,16 +557,13 @@ impl SnipApp {
         let Some(rx) = &self.rx else { return };
         let Ok(outcome) = rx.try_recv() else { return };
         self.rx = None;
-        match &outcome {
-            Outcome::Translated(t) | Outcome::Failed(t) => {
-                ui::install_fallback_fonts(ctx, t);
-                if self.mode == Mode::Copy {
-                    self.grow_to_result(ctx);
-                }
+        if let Some(text) = outcome.script_text() {
+            ui::install_fallback_fonts(ctx, &text);
+            if self.mode == Mode::Copy {
+                self.grow_to_result(ctx);
             }
-            Outcome::Copied(_) | Outcome::NoText | Outcome::Black => {
-                self.close_at = Some(Instant::now() + AUTO_CLOSE)
-            }
+        } else {
+            self.close_at = Some(Instant::now() + AUTO_CLOSE);
         }
         self.phase = Phase::Done(outcome);
     }
@@ -867,34 +899,138 @@ impl SnipApp {
         });
     }
 
-    fn body_ui(&self, ui: &mut egui::Ui, p: &Palette) {
+    /// One translation: title (and note) with an icon-only copy button, then the selectable text.
+    /// Returns true when the copy button was clicked.
+    fn section_ui(
+        ui: &mut egui::Ui,
+        title: &str,
+        note: Option<&str>,
+        text: &str,
+        strict: bool,
+        copy_name: &str,
+    ) -> bool {
+        let mut copy = false;
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = space::XS;
+                ui.label(RichText::new(title).font(theme::strong(size::BODY)));
+                if let Some(note) = note {
+                    ui.label(theme::caption(ui.ctx(), note));
+                }
+            });
+            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                copy = icons::button(ui, Icon::Copy, "", copy_name).clicked();
+            });
+        });
+        ui.add_space(space::SM);
+        let mut shown: &str = text;
+        ui.add(
+            TextEdit::multiline(&mut shown)
+                .id(text_id(strict))
+                .font(theme::reading())
+                .horizontal_align(if is_rtl(text) {
+                    Align::RIGHT
+                } else {
+                    Align::LEFT
+                })
+                .desired_width(f32::INFINITY)
+                .frame(Frame::NONE),
+        );
+        copy
+    }
+
+    /// The translation to show and copy, unless the model found no text.
+    fn translation(&self) -> Option<&Translation> {
+        match &self.phase {
+            Phase::Done(Outcome::Translated(t)) if !t.is_no_text() => Some(t),
+            _ => None,
+        }
+    }
+
+    fn body_ui(&self, ui: &mut egui::Ui, p: &Palette) -> Option<Act> {
+        let mut act = None;
         match &self.phase {
             Phase::Busy(_) => {
                 self.header_ui(ui, p);
                 ui.add_space(space::SM);
                 let line = ui.text_style_height(&theme::reading());
-                for share in SKELETON {
-                    let (bar, _) = ui.allocate_exact_size(
-                        vec2(ui.available_width() * share, line),
-                        Sense::hover(),
-                    );
-                    ui.painter()
-                        .rect_filled(bar, CornerRadius::same(radius::CONTROL), p.hover);
+                for group in 0..2 {
+                    if group > 0 {
+                        ui.add_space(space::MD);
+                    }
+                    for share in SKELETON {
+                        let (bar, _) = ui.allocate_exact_size(
+                            vec2(ui.available_width() * share, line),
+                            Sense::hover(),
+                        );
+                        ui.painter()
+                            .rect_filled(bar, CornerRadius::same(radius::CONTROL), p.hover);
+                    }
                 }
             }
-            Phase::Done(Outcome::Translated(text)) => {
+            Phase::Done(Outcome::Translated(t)) if t.is_no_text() => {
+                ui.horizontal(|ui| {
+                    icons::show(ui, Icon::Alert, p.muted);
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = space::XS;
+                        ui.label(RichText::new("No text found").font(theme::strong(size::BODY)));
+                        ui.label(theme::caption(
+                            ui.ctx(),
+                            "Try a larger area or a clearer font.",
+                        ));
+                    });
+                });
+            }
+            Phase::Done(Outcome::Translated(t)) => {
                 self.header_ui(ui, p);
+                ui.add_space(space::SM);
                 ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        let mut shown: &str = text;
-                        ui.add(
-                            TextEdit::multiline(&mut shown)
-                                .id(Id::unique(TEXT_ID))
-                                .font(theme::reading())
-                                .desired_width(f32::INFINITY)
-                                .frame(Frame::NONE),
+                        if t.is_single() {
+                            if Self::section_ui(
+                                ui,
+                                "Translation",
+                                None,
+                                &t.conversational,
+                                false,
+                                "Copy translation",
+                            ) {
+                                act = Some(Act::Copy);
+                            }
+                            return;
+                        }
+                        if Self::section_ui(
+                            ui,
+                            "Conversational",
+                            Some("How a native speaker would say it"),
+                            &t.conversational,
+                            false,
+                            "Copy conversational translation",
+                        ) {
+                            act = Some(Act::Copy);
+                        }
+                        ui.add_space(space::MD);
+                        let (rule, _) = ui.allocate_exact_size(
+                            vec2(ui.available_width(), HAIRLINE),
+                            Sense::hover(),
                         );
+                        ui.painter().hline(
+                            rule.x_range(),
+                            rule.center().y,
+                            Stroke::new(HAIRLINE, p.border),
+                        );
+                        ui.add_space(space::MD);
+                        if Self::section_ui(
+                            ui,
+                            "Strict",
+                            Some("Close to the original wording"),
+                            &t.strict,
+                            true,
+                            "Copy strict translation",
+                        ) {
+                            act = Some(Act::CopyStrict);
+                        }
                     });
             }
             Phase::Done(Outcome::Failed(msg)) => {
@@ -930,21 +1066,25 @@ impl SnipApp {
             }
             _ => {}
         }
+        act
     }
 
     fn footer_ui(&self, ui: &mut egui::Ui, p: &Palette) -> Option<Act> {
         let mut act = None;
         match &self.phase {
             Phase::Done(Outcome::Translated(_)) => {
-                let tip = if cfg!(target_os = "macos") {
-                    "Copy all (Cmd+C)"
-                } else {
-                    "Copy all (Ctrl+C)"
-                };
-                let copy =
-                    theme::primary_scope(ui, |ui| icons::button(ui, Icon::Copy, "Copy", "Copy"));
-                if copy.on_hover_text(tip).clicked() {
-                    act = Some(Act::Copy);
+                if self.translation().is_some() {
+                    let tip = if cfg!(target_os = "macos") {
+                        "Copy (Cmd+C)"
+                    } else {
+                        "Copy (Ctrl+C)"
+                    };
+                    let copy = theme::primary_scope(ui, |ui| {
+                        icons::button(ui, Icon::Copy, "Copy", "Copy")
+                    });
+                    if copy.on_hover_text(tip).clicked() {
+                        act = Some(Act::Copy);
+                    }
                 }
             }
             Phase::Done(Outcome::Failed(_)) => {
@@ -987,20 +1127,25 @@ impl SnipApp {
         let body = Rect::from_min_max(full.min, pos2(full.max.x, split));
         let footer = Rect::from_min_max(pos2(full.min.x, split), full.max)
             .shrink2(vec2(space::LG, space::MD));
+        let mut act = None;
         ui.scope_builder(UiBuilder::new().max_rect(body), |ui| {
-            Frame::new()
+            act = Frame::new()
                 .inner_margin(Margin::same(space::LG as i8))
-                .show(ui, |ui| self.body_ui(ui, &p));
+                .show(ui, |ui| self.body_ui(ui, &p))
+                .inner;
         });
         ui.painter()
             .hline(full.x_range(), split, Stroke::new(HAIRLINE, p.border));
-        let mut act = None;
         let footer_builder = UiBuilder::new()
             .max_rect(footer)
             .layout(Layout::left_to_right(Align::Center));
-        ui.scope_builder(footer_builder, |ui| act = self.footer_ui(ui, &p));
+        ui.scope_builder(footer_builder, |ui| {
+            if let Some(clicked) = self.footer_ui(ui, &p) {
+                act = Some(clicked);
+            }
+        });
 
-        if matches!(self.phase, Phase::Done(Outcome::Translated(_))) {
+        if self.translation().is_some() {
             let (enter, copy) = ctx.input(|i| {
                 (
                     i.key_pressed(Key::Enter),
@@ -1008,7 +1153,8 @@ impl SnipApp {
                 )
             });
             let any_focus = ctx.memory(|m| m.focused().is_some());
-            let text_focus = ctx.memory(|m| m.has_focus(Id::unique(TEXT_ID)));
+            let text_focus =
+                ctx.memory(|m| m.has_focus(text_id(false)) || m.has_focus(text_id(true)));
             if enter && !any_focus {
                 act = Some(Act::CopyClose);
             } else if copy && !text_focus {
@@ -1022,15 +1168,20 @@ impl SnipApp {
 
     fn apply(&mut self, ctx: &egui::Context, act: Act) {
         match act {
-            Act::Copy | Act::CopyClose => {
-                let Phase::Done(Outcome::Translated(text)) = &self.phase else {
+            Act::Copy | Act::CopyStrict | Act::CopyClose => {
+                let Some(t) = self.translation() else {
                     return;
+                };
+                let (text, done) = if matches!(act, Act::CopyStrict) {
+                    (&t.strict, "Copied strict translation")
+                } else {
+                    (&t.conversational, "Copied")
                 };
                 match clip::set_text(text) {
                     Ok(()) if matches!(act, Act::CopyClose) => {
                         ctx.send_viewport_cmd(ViewportCommand::Close);
                     }
-                    Ok(()) => self.status = Some(Status::Ok("Copied".to_owned())),
+                    Ok(()) => self.status = Some(Status::Ok(done.to_owned())),
                     Err(e) => self.status = Some(Status::Err(e)),
                 }
             }
@@ -1224,5 +1375,17 @@ mod tests {
             monitor,
         );
         assert_eq!(p, pos2(1480.0, 0.0));
+    }
+
+    #[test]
+    fn rtl_follows_the_first_letter() {
+        assert!(is_rtl("שלום עולם"));
+        assert!(is_rtl("مرحبا بالعالم"));
+        assert!(is_rtl("42. مرحبا"));
+        assert!(is_rtl("\u{FB50}\u{FE70}"));
+        assert!(!is_rtl("Hello مرحبا"));
+        assert!(!is_rtl("Bonjour"));
+        assert!(!is_rtl("12 34"));
+        assert!(!is_rtl(""));
     }
 }

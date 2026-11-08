@@ -254,7 +254,7 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text: "Pick the target language in Settings under Translate to. The list has 22 languages, from Arabic and Bengali to Vietnamese and Ukrainian.",
+    text: "Pick the target language in Settings under Translate to. The list has 48 languages, from Arabic and Bengali to Urdu and Vietnamese. You can also type any other language.",
   },
   {
     type: "h2",
@@ -263,14 +263,14 @@ export const translate: Block[] = [
   },
   {
     type: "p",
-    text: "The header reads Translated to followed by the language. Under it, a caption names the provider and model, and says the text is an AI translation. Below that is the translation, which you can select. The footer has Copy and Close.",
+    text: "The header reads Translated to followed by the language. Under it, a caption names the provider and model, and says the text is an AI translation. Below that are two versions of the translation, which you can select. Conversational is how a native speaker would say it. Strict stays close to the original wording. Each has its own copy button, and the footer has Copy and Close. If both versions are the same, one section titled Translation is shown.",
   },
   {
     type: "table",
     head: ["Key", "What it does"],
     rows: [
-      ["{{Enter}}", "Copies the translation and closes the window."],
-      ["{{Ctrl+C}}", "Copies all of the translation. On macOS use {{Cmd+C}}."],
+      ["{{Enter}}", "Copies the conversational translation and closes the window."],
+      ["{{Ctrl+C}}", "Copies the conversational translation. On macOS use {{Cmd+C}}."],
       ["{{Esc}}", "Closes the window."],
     ],
   },
@@ -308,7 +308,7 @@ export const translate: Block[] = [
   {
     type: "callout",
     kind: "warning",
-    text: "The result window does not shape text. Arabic, Urdu, Hindi, Bengali and Thai translations appear with letters unjoined and marks misplaced. The Copy button still copies the correct text, so use it for those languages.",
+    text: "Letters join and scripts such as Arabic, Hindi, Bengali and Thai are shaped. A line that mixes right-to-left and left-to-right text may show the left-to-right words out of order. Copy always copies the correct text.",
   },
 ];
 
@@ -566,11 +566,11 @@ export const troubleshooting: Block[] = [
   {
     type: "h2",
     id: "script",
-    text: "Arabic, Hindi or Thai text looks broken",
+    text: "Mixed right-to-left text shows words out of order",
   },
   {
     type: "p",
-    text: "The result window does not shape text, so letters appear unjoined. The translation itself is correct. Press Copy and paste it into an app that renders the script.",
+    text: "A line that mixes right-to-left and left-to-right text may show the left-to-right words out of order, because the result window does not reorder mixed text. The translation itself is correct. Press Copy and paste it into an app that lays the text out properly.",
   },
   {
     type: "h2",

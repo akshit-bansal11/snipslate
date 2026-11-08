@@ -18,29 +18,55 @@ use crate::translator::{
     Input, ModelInfo, Provider, TranslateJob, is_allowed_base_url, list_models, translate,
 };
 
-const LANGUAGES: [&str; 22] = [
-    "English",
-    "Spanish",
-    "French",
-    "German",
-    "Italian",
-    "Portuguese",
-    "Dutch",
-    "Russian",
-    "Ukrainian",
-    "Polish",
-    "Turkish",
+const LANGUAGES: [&str; 48] = [
     "Arabic",
-    "Hindi",
     "Bengali",
-    "Urdu",
+    "Bulgarian",
+    "Catalan",
     "Chinese (Simplified)",
     "Chinese (Traditional)",
-    "Japanese",
-    "Korean",
-    "Vietnamese",
-    "Thai",
+    "Croatian",
+    "Czech",
+    "Danish",
+    "Dutch",
+    "English",
+    "Filipino",
+    "Finnish",
+    "French",
+    "German",
+    "Greek",
+    "Gujarati",
+    "Hebrew",
+    "Hindi",
+    "Hungarian",
     "Indonesian",
+    "Italian",
+    "Japanese",
+    "Kannada",
+    "Korean",
+    "Malay",
+    "Malayalam",
+    "Marathi",
+    "Norwegian",
+    "Persian",
+    "Polish",
+    "Portuguese (Brazil)",
+    "Portuguese (Portugal)",
+    "Punjabi",
+    "Romanian",
+    "Russian",
+    "Serbian",
+    "Slovak",
+    "Spanish",
+    "Swahili",
+    "Swedish",
+    "Tamil",
+    "Telugu",
+    "Thai",
+    "Turkish",
+    "Ukrainian",
+    "Urdu",
+    "Vietnamese",
 ];
 
 /// Width of the label column inside a card.
@@ -311,7 +337,7 @@ impl SettingsApp {
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             // The receiver is gone only if the window closed; nothing to report then.
-            let _ = tx.send(translate(&job));
+            let _ = tx.send(translate(&job).map(|t| t.conversational));
             ctx.request_repaint();
         });
         self.test = TestState::Running(rx);
